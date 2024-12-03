@@ -49,13 +49,6 @@ coverage/
 .jest/
 .tox/
 
-# TypeScript output
-*.js
-*.js.map
-*.d.ts
-*.d.ts.map
-tsconfig.tsbuildinfo
-
 # Linting outputs
 .eslintcache
 .stylelintcache
@@ -65,3 +58,4 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 .vercel
+vercel.json
