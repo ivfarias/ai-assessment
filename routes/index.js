@@ -6,11 +6,43 @@ dotenv.config();
 
 const router = express.Router();
 
+// Add a Set to keep track of processed message IDs
+const processedMessages = new Set();
+
 // Webhook endpoint for WhatsApp
-router.post("/webhook", (req, res) => {
+router.post("/webhook", async (req, res) => {
   console.log("Received POST request to /webhook");
   console.log("Request body:", JSON.stringify(req.body, null, 2));
-  handleIncomingMessage(req, res);
+
+  try {
+    const { entry } = req.body;
+    
+    if (entry && entry[0].changes && entry[0].changes[0].value.messages) {
+      const message = entry[0].changes[0].value.messages[0];
+      const messageId = message.id;
+
+      // Check if the message has already been processed
+      if (processedMessages.has(messageId)) {
+        console.log(`Message ${messageId} has already been processed. Skipping.`);
+        return res.sendStatus(200);
+      }
+
+      // Add the message ID to the set of processed messages
+      processedMessages.add(messageId);
+
+      // Process the message
+      await handleIncomingMessage(req, res);
+
+      // Remove the message ID from the set after some time (e.g., 5 minutes)
+      setTimeout(() => {
+        processedMessages.delete(messageId);
+      }, 5 * 60 * 1000);
+    }
+  } catch (error) {
+    console.error("Error processing webhook:", error);
+  }
+
+  res.sendStatus(200);
 });
 
 // Webhook verification
