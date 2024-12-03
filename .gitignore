@@ -8,6 +8,7 @@ yarn-error.log*
 # Environment files
 .env
 .env.* 
+vercel.json
 
 # Python virtual environment
 venv/
