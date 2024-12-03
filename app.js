@@ -1,6 +1,5 @@
-import createError from 'http-errors';
 import express from 'express';
-import path from 'path';
+import createError from 'http-errors';
 import cookieParser from 'cookie-parser';
 import logger from 'morgan';
 import dotenv from 'dotenv';
@@ -49,5 +48,14 @@ app.use(function (err, req, res, next) {
   });
 });
 
+// For Vercel serverless deployment and local development
 export default app;
+
+// For local development server
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
 
