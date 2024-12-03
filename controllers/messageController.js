@@ -1,8 +1,9 @@
 import { queryEmbeddings } from "../services/queryService.js";
 import { sendMessageToWhatsApp, markMessageAsRead } from "../services/whatsappService.js";
 
-// Add a Set to keep track of processed message IDs
-const processedMessages = new Set();
+// Add a cache to store recent responses
+const responseCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export async function handleIncomingMessage(req, res) {
     try {
@@ -21,38 +22,37 @@ export async function handleIncomingMessage(req, res) {
             return res.sendStatus(400); // Bad Request
         }
 
-        const messageId = message.id;
         const userMessage = message.text.body;
         const userId = message.from;
-
-        // Check if the message has already been processed
-        if (processedMessages.has(messageId)) {
-            console.log(`Message ${messageId} has already been processed. Skipping.`);
-            return res.sendStatus(200);
-        }
-
-        // Add the message ID to the set of processed messages
-        processedMessages.add(messageId);
+        const messageId = message.id;
 
         console.log(`Received message from ${userId}: ${userMessage}`);
+
+        // Check cache for recent identical messages
+        const cacheKey = `${userId}:${userMessage}`;
+        if (responseCache.has(cacheKey)) {
+            console.log("Using cached response");
+            await sendMessageToWhatsApp(userId, responseCache.get(cacheKey));
+            await markMessageAsRead(messageId);
+            return res.sendStatus(200);
+        }
 
         try {
             const aiResponse = await queryEmbeddings(userMessage);
             console.log(`AI Response: ${aiResponse.answer}`);
 
+            // Cache the response
+            responseCache.set(cacheKey, aiResponse.answer);
+            setTimeout(() => responseCache.delete(cacheKey), CACHE_TTL);
+
             await sendMessageToWhatsApp(userId, aiResponse.answer);
             await markMessageAsRead(messageId);
-
-            // Remove the message ID from the set after processing
-            processedMessages.delete(messageId);
         } catch (error) {
             console.error("Error processing WhatsApp message:", error);
             await sendMessageToWhatsApp(
                 userId,
                 "I'm experiencing technical difficulties. Please try again later."
             );
-            // Remove the message ID from the set in case of error
-            processedMessages.delete(messageId);
         }
 
         res.sendStatus(200);
