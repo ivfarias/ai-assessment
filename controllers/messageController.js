@@ -2,14 +2,18 @@ import { queryEmbeddings, getLastConversation, setLastConversation } from "../se
 import { sendMessageToWhatsApp, markMessageAsRead } from "../services/whatsappService.js";
 import { collectFeedback, detectLanguage } from "../services/feedbackService.js";
 
-// Change this function
-async function sendFeedbackRequestAfterDelay(userId, language) {
-  setTimeout(async () => {
-    await collectFeedback(userId, language);
+const processedMessages = new Set();
+
+function sendFeedbackRequestAfterDelay(userId, language) {
+  setTimeout(() => {
+    collectFeedback(userId, language).catch(error => {
+      console.error("Error sending feedback request:", error);
+    });
   }, 10 * 60 * 1000); // 10 minutes delay
 }
 
 export async function handleIncomingMessage(req, res) {
+  console.log("Entering handleIncomingMessage");
   try {
     const body = req.body;
 
@@ -30,6 +34,8 @@ export async function handleIncomingMessage(req, res) {
     const userMessage = message.text.body;
     const userId = message.from;
 
+    console.log(`Processing message: ${messageId} from user: ${userId}`);
+
     // Check if the message has already been processed
     if (processedMessages.has(messageId)) {
       console.log(`Message ${messageId} has already been processed. Skipping.`);
@@ -39,14 +45,21 @@ export async function handleIncomingMessage(req, res) {
     // Add the message ID to the set of processed messages
     processedMessages.add(messageId);
 
-    console.log(`Received message from ${userId}: ${userMessage}`);
+    console.log(`Received message: "${userMessage}"`);
 
-    const userLanguage = await detectLanguage(userMessage);
-    const lastConversation = getLastConversation(userId);
+    let userLanguage, lastConversation;
+    try {
+      userLanguage = await detectLanguage(userMessage);
+      lastConversation = getLastConversation(userId);
+    } catch (error) {
+      console.error("Error in language detection or getting last conversation:", error);
+      userLanguage = 'en'; // Default to English
+      lastConversation = null;
+    }
 
     try {
       const aiResponse = await queryEmbeddings(userMessage, { context: lastConversation, language: userLanguage });
-      console.log(`AI Response: ${aiResponse.answer}`);
+      console.log(`AI Response: "${aiResponse.answer}"`);
 
       await sendMessageToWhatsApp(userId, aiResponse.answer);
       await markMessageAsRead(messageId);
@@ -55,10 +68,12 @@ export async function handleIncomingMessage(req, res) {
       setLastConversation(userId, { query: userMessage, response: aiResponse.answer });
 
       // Send feedback request after delay
-      await sendFeedbackRequestAfterDelay(userId, userLanguage);
+      sendFeedbackRequestAfterDelay(userId, userLanguage);
 
       // Remove the message ID from the set after processing
       processedMessages.delete(messageId);
+
+      console.log(`Successfully processed message: ${messageId}`);
     } catch (error) {
       console.error("Error processing WhatsApp message:", error);
       await sendMessageToWhatsApp(
@@ -74,6 +89,7 @@ export async function handleIncomingMessage(req, res) {
     console.error("Unexpected error in handleIncomingMessage:", error);
     res.sendStatus(500); // Internal Server Error
   }
+  console.log("Exiting handleIncomingMessage");
 }
 
 function handleStatusUpdate(body) {
