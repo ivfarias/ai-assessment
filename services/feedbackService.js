@@ -1,9 +1,9 @@
+// services/feedbackService.js
 import { sendMessageToWhatsApp } from "./whatsappService.js";
 import OpenAI from 'openai';
+import dotenv from 'dotenv';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+dotenv.config();
 
 const languageDetectionAI = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -40,4 +40,3 @@ export async function detectLanguage(text) {
 
     return response.choices[0].message.content.trim().toLowerCase();
 }
-

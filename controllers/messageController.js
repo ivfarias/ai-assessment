@@ -1,13 +1,11 @@
-// controllers/messageController.js
 import { queryEmbeddings, getLastConversation, setLastConversation } from "../services/queryService.js";
 import { sendMessageToWhatsApp, markMessageAsRead } from "../services/whatsappService.js";
-import { sendFeedbackRequest } from "../services/feedbackService.js";
-import { detectLanguage } from "../services/languageService.js";
+import { collectFeedback, detectLanguage } from "../services/feedbackService.js";
 
-// Add this function at the end of the file
+// Change this function
 async function sendFeedbackRequestAfterDelay(userId, language) {
   setTimeout(async () => {
-    await sendFeedbackRequest(userId, language);
+    await collectFeedback(userId, language);
   }, 10 * 60 * 1000); // 10 minutes delay
 }
 
