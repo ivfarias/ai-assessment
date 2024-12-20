@@ -16,6 +16,6 @@ export async function detectLanguage(text) {
     return response.choices[0].message.content.trim().toLowerCase();
   } catch (error) {
     console.error('Language detection failed:', error);
-    return 'pt';
+    throw new Error('Language detection failed');
   }
 }

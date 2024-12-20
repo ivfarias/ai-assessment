@@ -6,9 +6,13 @@ dotenv.config();
 
 const router = express.Router();
 
-// Add a Set to keep track of processed message IDs
+router.get('/', (req, res) => {
+  res.status(200).json({ message: 'Kyte AI API is running' });
+});
+
 const processedMessages = new Set();
 
+// Webhook endpoint for WhatsApp
 // Webhook endpoint for WhatsApp
 router.post("/webhook", async (req, res) => {
   console.log("Received POST request to /webhook");
@@ -31,18 +35,19 @@ router.post("/webhook", async (req, res) => {
       processedMessages.add(messageId);
 
       // Process the message
-      await handleIncomingMessage(req, res);
+      await handleIncomingMessage(req.body);
 
       // Remove the message ID from the set after some time (e.g., 5 minutes)
       setTimeout(() => {
         processedMessages.delete(messageId);
       }, 5 * 60 * 1000);
     }
+
+    res.sendStatus(200);
   } catch (error) {
     console.error("Error processing webhook:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
-
-  res.sendStatus(200);
 });
 
 // Webhook verification

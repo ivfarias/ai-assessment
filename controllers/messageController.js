@@ -1,6 +1,7 @@
 import { queryEmbeddings, getLastConversation, setLastConversation } from "../services/queryService.js";
 import { sendMessageToWhatsApp, markMessageAsRead } from "../services/whatsappService.js";
-import { collectFeedback, detectLanguage } from "../services/feedbackService.js";
+import { collectFeedback } from "../services/feedbackService.js";
+import { detectLanguage } from "../services/languageService.js";
 
 const processedMessages = new Set();
 
@@ -12,22 +13,20 @@ function sendFeedbackRequestAfterDelay(userId, language) {
   }, 10 * 60 * 1000); // 10 minutes delay
 }
 
-export async function handleIncomingMessage(req, res) {
+export async function handleIncomingMessage(body) {
   console.log("Entering handleIncomingMessage");
   try {
-    const body = req.body;
-
     // Check if this is a status update
     if (body.entry?.[0]?.changes?.[0]?.value?.statuses) {
       handleStatusUpdate(body);
-      return res.sendStatus(200);
+      return;
     }
 
     // Validate incoming message structure
     const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!message || message.type !== "text") {
       console.error("Invalid or unsupported message format");
-      return res.sendStatus(400); // Bad Request
+      return;
     }
 
     const messageId = message.id;
@@ -39,7 +38,7 @@ export async function handleIncomingMessage(req, res) {
     // Check if the message has already been processed
     if (processedMessages.has(messageId)) {
       console.log(`Message ${messageId} has already been processed. Skipping.`);
-      return res.sendStatus(200);
+      return;
     }
 
     // Add the message ID to the set of processed messages
@@ -83,11 +82,8 @@ export async function handleIncomingMessage(req, res) {
       // Remove the message ID from the set in case of error
       processedMessages.delete(messageId);
     }
-
-    res.sendStatus(200);
   } catch (error) {
     console.error("Unexpected error in handleIncomingMessage:", error);
-    res.sendStatus(500); // Internal Server Error
   }
   console.log("Exiting handleIncomingMessage");
 }

@@ -11,6 +11,10 @@ dotenv.config();
 
 const app = express();
 
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
 // Middleware
 app.use(logger('dev'));
 app.use(express.json({
@@ -37,8 +41,14 @@ app.use(function (err, req, res, next) {
   res.locals.message = err.message;
   res.locals.error = req.app.get('env') === 'development' ? err : {};
 
-  // Log the error
-  console.error(err);
+  // Log the error with more details
+  console.error('Error details:', {
+    message: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    body: req.body
+  });
 
   // Send error response
   res.status(err.status || 500);
