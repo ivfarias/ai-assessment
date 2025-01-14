@@ -14,7 +14,7 @@ const embeddings = new OpenAIEmbeddings({
   modelName: "text-embedding-3-large",
 });
 
-const cache = new NodeCache({ stdTTL: 3600, maxKeys: 1000 }); 
+const cache = new NodeCache({ stdTTL: 3600, maxKeys: 1000 });
 
 async function retry(fn, maxRetries = 3) {
   for (let i = 0; i < maxRetries; i++) {
@@ -22,7 +22,7 @@ async function retry(fn, maxRetries = 3) {
       return await fn();
     } catch (error) {
       if (i === maxRetries - 1) throw error;
-      await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i))); 
+      await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i)));
     }
   }
 }
@@ -54,7 +54,7 @@ export async function queryEmbeddings(query, options = {}) {
 
   console.log('Retrieved contexts:', contexts);
 
- 
+
   const systemPrompt = process.env.SYSTEM_PROMPT;
 
   const completion = await retry(() => openai.chat.completions.create({
@@ -62,7 +62,8 @@ export async function queryEmbeddings(query, options = {}) {
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: `Query: "${query}"\n\nContexts:\n${contexts.map(c => c.text).join('\n\n')}` }
-    ]
+    ],
+    temperature: 0.3
   }));
 
   console.log('AI Response:', completion.choices[0].message.content);
@@ -82,5 +83,5 @@ export function getLastConversation(userId) {
 }
 
 export function setLastConversation(userId, conversation) {
-  cache.set(`lastConversation:${userId}`, conversation, 86400); 
+  cache.set(`lastConversation:${userId}`, conversation, 86400);
 }
