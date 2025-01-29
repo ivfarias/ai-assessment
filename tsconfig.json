@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "outDir": "dist",
+		"allowJs": true,
+		"sourceMap": true,
+		"lib": ["es2023"],
+		"module": "node16",
+		"target": "es2022",
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"moduleResolution": "node16"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}

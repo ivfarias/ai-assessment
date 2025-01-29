@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node ./bin/www",
-    "build": "echo 'Build step completed'"
+    "build": "echo 'Build step completed'",
+		"dev": "tsx watch -r dotenv/config ./src/server.ts"
   },
   "dependencies": {
     "@langchain/openai": "^0.3.14",
@@ -28,5 +29,11 @@
     "openai": "^4.73.1",
     "stopword": "^3.1.1",
     "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.12.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
   }
 }

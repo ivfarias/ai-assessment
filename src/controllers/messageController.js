@@ -1,5 +1,12 @@
-import { queryEmbeddings, getLastConversation, setLastConversation } from "../services/queryService.js";
-import { sendMessageToWhatsApp, markMessageAsRead } from "../services/whatsappService.js";
+import {
+  queryEmbeddings,
+  getLastConversation,
+  setLastConversation,
+} from "../services/queryService.js";
+import {
+  sendMessageToWhatsApp,
+  markMessageAsRead,
+} from "../services/whatsappService.js";
 import { collectFeedback } from "../services/feedbackService.js";
 import { detectLanguage } from "../services/languageService.js";
 
@@ -7,7 +14,7 @@ const processedMessages = new Set();
 
 function sendFeedbackRequestAfterDelay(userId, language) {
   setTimeout(() => {
-    collectFeedback(userId, language).catch(error => {
+    collectFeedback(userId, language).catch((error) => {
       console.error("Error sending feedback request:", error);
     });
   }, 10 * 60 * 1000); // 10 minutes delay
@@ -51,20 +58,29 @@ export async function handleIncomingMessage(body) {
       userLanguage = await detectLanguage(userMessage);
       lastConversation = getLastConversation(userId);
     } catch (error) {
-      console.error("Error in language detection or getting last conversation:", error);
-      userLanguage = 'en'; // Default to English
+      console.error(
+        "Error in language detection or getting last conversation:",
+        error
+      );
+      userLanguage = "en"; // Default to English
       lastConversation = null;
     }
 
     try {
-      const aiResponse = await queryEmbeddings(userMessage, { context: lastConversation, language: userLanguage });
+      const aiResponse = await queryEmbeddings(userMessage, {
+        context: lastConversation,
+        language: userLanguage,
+      });
       console.log(`AI Response: "${aiResponse.answer}"`);
 
       await sendMessageToWhatsApp(userId, aiResponse.answer);
       await markMessageAsRead(messageId);
 
       // Update the last conversation for this user
-      setLastConversation(userId, { query: userMessage, response: aiResponse.answer });
+      setLastConversation(userId, {
+        query: userMessage,
+        response: aiResponse.answer,
+      });
 
       // Send feedback request after delay
       sendFeedbackRequestAfterDelay(userId, userLanguage);
