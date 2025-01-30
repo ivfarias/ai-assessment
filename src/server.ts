@@ -1,62 +1,45 @@
-import express, { Request, Response, NextFunction } from "express";
-import createError from "http-errors";
-import cookieParser from "cookie-parser";
-import logger from "morgan";
-import dotenv from "dotenv";
-import indexRouter from "./routes/index.js";
-import helmet from "helmet";
-import cors from "cors";
+import fastify from 'fastify';
+import fastifyCookie from '@fastify/cookie';
+import fastifyHelmet from '@fastify/helmet';
+import cors from '@fastify/cors';
+import dotenv from 'dotenv';
+import indexRouter from './routes/index.js';
+import { logger } from './middleware/logger.js';
 
 dotenv.config();
 
-const app = express();
+const app = fastify();
 
-app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-  next();
-});
+app.addHook('onRequest', logger);
+
 // Middleware
-app.use(logger("dev"));
-app.use(
-  express.json({
-    verify: (req: Request, res: Response, buf: Buffer) => {
-      (req as any).rawBody = buf.toString();
-    },
-  })
-);
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(helmet());
-app.use(cors());
+app.register(fastifyCookie);
+app.register(fastifyHelmet);
+app.register(cors);
 
 // Routes
-app.use("/", indexRouter);
+app.register(indexRouter);
 
 // Catch 404 and forward to error handler
-app.use(function (req: Request, res: Response, next: NextFunction) {
-  next(createError(404));
+app.setNotFoundHandler((_, reply) => {
+  reply.status(404).send({ error: 'Not Found' });
 });
 
 // Error handler
-app.use(function (err: any, req: Request, res: Response) {
-  // Set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get("env") === "development" ? err : {};
-
+app.setErrorHandler((error, request, reply) => {
   // Log the error with more details
-  console.error("Error details:", {
-    message: err.message,
-    stack: err.stack,
-    url: req.url,
-    method: req.method,
-    body: req.body,
+  console.error('Error details:', {
+    message: error.message,
+    stack: error.stack,
+    url: request.url,
+    method: request.method,
+    body: request.body,
   });
 
   // Send error response
-  res.status(err.status || 500);
-  res.json({
-    message: err.message,
-    error: req.app.get("env") === "development" ? err : {},
+  reply.status(error.statusCode || 500).send({
+    message: error.message,
+    error: process.env.NODE_ENV === 'development' ? error : {},
   });
 });
 
@@ -64,9 +47,10 @@ app.use(function (err: any, req: Request, res: Response) {
 export default app;
 
 // For local development server
-if (process.env.NODE_ENV !== "production") {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = Number(process.env.PORT) || 3000;
+  console.log(`Starting server on port ${PORT}`);
+  app.listen({
+    port: PORT,
   });
 }
