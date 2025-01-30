@@ -1,26 +1,25 @@
-import express from "express";
-import { handleIncomingMessage } from "../controllers/messageController.js";
+import express, { Request, Response } from 'express';
+import { handleIncomingMessage } from '../controllers/messageController.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const router = express.Router();
 
-router.get('/', (req, res) => {
+router.get('/', (_: Request, res: Response) => {
   res.status(200).json({ message: 'Kyte AI API is running' });
 });
 
-const processedMessages = new Set();
+const processedMessages = new Set<string>();
 
 // Webhook endpoint for WhatsApp
-// Webhook endpoint for WhatsApp
-router.post("/webhook", async (req, res) => {
-  console.log("Received POST request to /webhook");
-  console.log("Request body:", JSON.stringify(req.body, null, 2));
+router.post('/webhook', async (req: Request, res: Response): Promise<any> => {
+  console.log('Received POST request to /webhook');
+  console.log('Request body:', JSON.stringify(req.body, null, 2));
 
   try {
     const { entry } = req.body;
-    
+
     if (entry && entry[0].changes && entry[0].changes[0].value.messages) {
       const message = entry[0].changes[0].value.messages[0];
       const messageId = message.id;
@@ -45,28 +44,27 @@ router.post("/webhook", async (req, res) => {
 
     res.sendStatus(200);
   } catch (error) {
-    console.error("Error processing webhook:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Error processing webhook:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Webhook verification
-router.get("/webhook", (req, res) => {
-  const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
-  const challenge = req.query["hub.challenge"];
+router.get('/webhook', (req: Request, res: Response) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
 
-  console.log("Received GET request to /webhook");
+  console.log('Received GET request to /webhook');
   console.log(`Mode: ${mode}, Token: ${token}, Challenge: ${challenge}`);
 
-  if (mode === "subscribe" && token === process.env.WEBHOOK_VERIFY_TOKEN) {
-    console.log("Webhook verified successfully!");
+  if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+    console.log('Webhook verified successfully!');
     res.status(200).send(challenge);
   } else {
-    console.log("Webhook verification failed.");
+    console.log('Webhook verification failed.');
     res.sendStatus(403);
   }
 });
 
 export default router;
-

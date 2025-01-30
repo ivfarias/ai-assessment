@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
-import { queryEmbeddings } from './queryService.js';
+import { queryEmbeddings } from './queryService.ts';
 
 dotenv.config();
 
