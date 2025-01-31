@@ -13,6 +13,9 @@ const embeddings = new OpenAIEmbeddings({
   modelName: "text-embedding-3-large",
 });
 
+// Conversation history storage (temporary in-memory solution)
+const conversationHistory = new Map();
+
 async function retry(fn, maxRetries = 3) {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -24,10 +27,18 @@ async function retry(fn, maxRetries = 3) {
   }
 }
 
-/**
- * Chama determinada vector store com base em contexto. 
- * Placeholder para caso desejem implementar mais funcionalidades.
- */
+export function getLastConversation(userId) {
+  return conversationHistory.get(userId) || null;
+}
+
+export function setLastConversation(userId, conversation) {
+  conversationHistory.set(userId, conversation);
+  // Auto-cleanup for stale conversations after 24 hours
+  setTimeout(() => {
+    conversationHistory.delete(userId);
+  }, 24 * 60 * 60 * 1000);
+}
+
 async function queryVectorStore(storeName, queryVector, options = {}) {
   if (storeName === "pinecone") {
     return retry(() => index.query({
@@ -36,16 +47,10 @@ async function queryVectorStore(storeName, queryVector, options = {}) {
       includeMetadata: true,
     }));
   }
-  // Placeholder para incluir bases de conhecimento (vectore stores) diferentes. 
   throw new Error(`Vector store "${storeName}" is not implemented.`);
 }
 
-/**
- *  Aqui está um placeholder para ilustrar como podemos utilizar 
- *  o langchain para fazer chamadas de api com base em contexto.
- */
 async function queryExternalAPI(apiName, payload) {
-  // Implement API call logic here
   console.log(`Calling API: ${apiName} with payload:`, payload);
   return { data: "Mock API response" };
 }
@@ -54,8 +59,6 @@ export async function queryEmbeddings(query, options = {}) {
   console.log(`Query: "${query}"`);
 
   const queryVector = await retry(() => embeddings.embedQuery(query));
-
-  // Retorna o contexto da vector store (base de conhecimento) primária (pinecone) 
   const vectorResults = await queryVectorStore("pinecone", queryVector, options);
 
   const contexts = vectorResults.matches.map(match => ({
@@ -68,8 +71,8 @@ export async function queryEmbeddings(query, options = {}) {
   console.log('Retrieved contexts:', contexts);
 
   const systemPrompt = process.env.SYSTEM_PROMPT;
-
   let apiResults = [];
+
   if (options.enableAPIQuery) {
     apiResults = await queryExternalAPI("mockAPI", { query, contexts });
   }
@@ -83,42 +86,13 @@ export async function queryEmbeddings(query, options = {}) {
     temperature: 0.5,
     max_tokens: 500,
     presence_penalty: 0.5
-
-    // Parte avançada do prompt-engineering. Deixei as opções abaixo comentadas para caso precisem ser utilizadas:
-
-    // Limite de tokens da responsta:
-    // max_tokens: 500,
-
-    // Configuração para punir repetições (-2.0 to 2.0)
-    // frequency_penalty: 0.5,
-
-    // Configuração para punir novos tópicos de conversa (-2.0 to 2.0)
-    // presence_penalty: 0.2,
-
-    // Recurso de probabilidades de log (log probabilities) na API da OpenAI. 
-    // Isso faz com que a API retorne os valores de probabilidade logarítmica para os tokens mais relevantes.
-
-    // logprobs: 5, 
-
-    // Número de completions para trazer e então escolher a melhor
-    // n: 3, 
-
-    // Stream response (processar dados em tempo real)
-    // stream: true, 
-
-    // Stop sequence para definir o final de uma resposta
-    // stop: ["\n", "END"]
-
-    // PS: Não cheguei a testar todas.
   }));
 
   console.log('AI Response:', completion.choices[0].message.content);
 
-  const result = {
+  return {
     matches: contexts,
     apiResults,
     answer: completion.choices[0].message.content
   };
-
-  return result;
 }
