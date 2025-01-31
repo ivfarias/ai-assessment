@@ -85,13 +85,14 @@ export async function queryEmbeddings(query, options = {}) {
   }
 
   const completion = await retry(() => openai.chat.completions.create({
-    model: "gpt-4",
+    model: "o3-mini",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: `Query: "${query}"\n\nContexts:\n${contexts.map(c => c.text).join('\n\n')}\n\nAPI Results:\n${JSON.stringify(apiResults)}` }
     ],
+    temperature: 0.4,
     max_tokens: 500,
-    presence_penalty: 1
+    presence_penalty: 0.5
   }));
 
   console.log('AI Response:', completion.choices[0].message.content);
