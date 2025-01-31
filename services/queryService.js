@@ -13,9 +13,6 @@ const embeddings = new OpenAIEmbeddings({
   modelName: "text-embedding-3-large",
 });
 
-// Conversation history storage (temporary in-memory solution)
-const conversationHistory = new Map();
-
 async function retry(fn, maxRetries = 3) {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -25,18 +22,6 @@ async function retry(fn, maxRetries = 3) {
       await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i)));
     }
   }
-}
-
-export function getLastConversation(userId) {
-  return conversationHistory.get(userId) || null;
-}
-
-export function setLastConversation(userId, conversation) {
-  conversationHistory.set(userId, conversation);
-  // Auto-cleanup for stale conversations after 24 hours
-  setTimeout(() => {
-    conversationHistory.delete(userId);
-  }, 24 * 60 * 60 * 1000);
 }
 
 async function queryVectorStore(storeName, queryVector, options = {}) {

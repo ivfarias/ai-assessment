@@ -1,4 +1,4 @@
-import { queryEmbeddings, getLastConversation, setLastConversation } from "../services/queryService.js";
+import { queryEmbeddings } from "../services/queryService.js"; // Removed getLastConversation and setLastConversation
 import { sendMessageToWhatsApp, markMessageAsRead } from "../services/whatsappService.js";
 import { collectFeedback } from "../services/feedbackService.js";
 import { detectLanguage } from "../services/languageService.js";
@@ -60,21 +60,18 @@ export async function handleIncomingMessage(body) {
 
     console.log(`Received message: "${userMessage}"`);
 
-    let userLanguage, lastConversation;
+    let userLanguage;
     try {
       userLanguage = await detectLanguage(userMessage);
       console.log(`Detected user language: ${userLanguage}`);
-      lastConversation = getLastConversation(userId);
-      console.log(`Retrieved last conversation for user: ${userId}`);
     } catch (error) {
-      console.error("Error in language detection or getting last conversation:", error);
-      userLanguage = 'en'; // Default to English
-      lastConversation = null;
+      console.error("Error in language detection:", error);
+      userLanguage = 'pt'; // Default to Portuguese
     }
 
     try {
-      // Query the AI embeddings for a response
-      const aiResponse = await queryEmbeddings(userMessage, { context: lastConversation, language: userLanguage });
+      // Query the AI embeddings for a response (no conversation history)
+      const aiResponse = await queryEmbeddings(userMessage, { language: userLanguage });
       console.log(`AI Response: "${aiResponse.answer}"`);
 
       // Send the AI response to WhatsApp
@@ -84,10 +81,6 @@ export async function handleIncomingMessage(body) {
       // Mark the message as read
       await markMessageAsRead(messageId);
       console.log(`Message marked as read: ${messageId}`);
-
-      // Update the last conversation for this user
-      setLastConversation(userId, { query: userMessage, response: aiResponse.answer });
-      console.log(`Updated last conversation for user: ${userId}`);
 
       // Send feedback request after delay
       sendFeedbackRequestAfterDelay(userId, userLanguage);
