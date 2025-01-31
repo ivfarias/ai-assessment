@@ -85,7 +85,7 @@ export async function queryEmbeddings(query, options = {}) {
   }
 
   const completion = await retry(() => openai.chat.completions.create({
-    model: "o3-mini",
+    model: "o3-mini-2025-01-31",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: `Query: "${query}"\n\nContexts:\n${contexts.map(c => c.text).join('\n\n')}\n\nAPI Results:\n${JSON.stringify(apiResults)}` }
