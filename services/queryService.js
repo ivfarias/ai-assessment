@@ -90,7 +90,7 @@ export async function queryEmbeddings(query, options = {}) {
       { role: "system", content: systemPrompt },
       { role: "user", content: `Query: "${query}"\n\nContexts:\n${contexts.map(c => c.text).join('\n\n')}\n\nAPI Results:\n${JSON.stringify(apiResults)}` }
     ],
-    temperature: 0.5,
+    temperature: 0.4,
     max_tokens: 500,
     presence_penalty: 0.5
   }));
