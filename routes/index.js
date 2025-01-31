@@ -1,18 +1,22 @@
 import express from "express";
 import { handleIncomingMessage } from "../controllers/messageController.js";
 import dotenv from 'dotenv';
+import LRU from 'lru-cache';
 
 dotenv.config();
 
 const router = express.Router();
 
+// Configure LRU cache for message deduplication
+const processedMessages = new LRU({
+  max: 1000, // Maximum number of message IDs to store
+  ttl: 5 * 60 * 1000, // Auto-expire entries after 5 minutes (300 seconds)
+});
+
 router.get('/', (req, res) => {
   res.status(200).json({ message: 'Kyte AI API is running' });
 });
 
-const processedMessages = new Set();
-
-// Webhook endpoint for WhatsApp
 // Webhook endpoint for WhatsApp
 router.post("/webhook", async (req, res) => {
   console.log("Received POST request to /webhook");
@@ -20,27 +24,22 @@ router.post("/webhook", async (req, res) => {
 
   try {
     const { entry } = req.body;
-    
-    if (entry && entry[0].changes && entry[0].changes[0].value.messages) {
+
+    if (entry?.[0]?.changes?.[0]?.value?.messages) {
       const message = entry[0].changes[0].value.messages[0];
       const messageId = message.id;
 
-      // Check if the message has already been processed
+      // Check for duplicate messages using LRU cache
       if (processedMessages.has(messageId)) {
-        console.log(`Message ${messageId} has already been processed. Skipping.`);
+        console.log(`Message ${messageId} already processed. Skipping.`);
         return res.sendStatus(200);
       }
 
-      // Add the message ID to the set of processed messages
-      processedMessages.add(messageId);
+      // Add to processed messages cache
+      processedMessages.set(messageId, true);
 
       // Process the message
       await handleIncomingMessage(req.body);
-
-      // Remove the message ID from the set after some time (e.g., 5 minutes)
-      setTimeout(() => {
-        processedMessages.delete(messageId);
-      }, 5 * 60 * 1000);
     }
 
     res.sendStatus(200);
@@ -69,4 +68,3 @@ router.get("/webhook", (req, res) => {
 });
 
 export default router;
-

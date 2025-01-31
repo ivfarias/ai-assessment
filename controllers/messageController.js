@@ -3,8 +3,6 @@ import { sendMessageToWhatsApp, markMessageAsRead } from "../services/whatsappSe
 import { collectFeedback } from "../services/feedbackService.js";
 import { detectLanguage } from "../services/languageService.js";
 
-const processedMessages = new Set();
-
 function sendFeedbackRequestAfterDelay(userId, language) {
   setTimeout(() => {
     collectFeedback(userId, language).catch(error => {
@@ -34,16 +32,6 @@ export async function handleIncomingMessage(body) {
     const userId = message.from;
 
     console.log(`Processing message: ${messageId} from user: ${userId}`);
-
-    // Check if the message has already been processed
-    if (processedMessages.has(messageId)) {
-      console.log(`Message ${messageId} has already been processed. Skipping.`);
-      return;
-    }
-
-    // Add the message ID to the set of processed messages
-    processedMessages.add(messageId);
-
     console.log(`Received message: "${userMessage}"`);
 
     let userLanguage, lastConversation;
@@ -52,7 +40,7 @@ export async function handleIncomingMessage(body) {
       lastConversation = getLastConversation(userId);
     } catch (error) {
       console.error("Error in language detection or getting last conversation:", error);
-      userLanguage = 'en'; // Default to English
+      userLanguage = 'pt'; // Default to Portuguese
       lastConversation = null;
     }
 
@@ -69,9 +57,6 @@ export async function handleIncomingMessage(body) {
       // Send feedback request after delay
       sendFeedbackRequestAfterDelay(userId, userLanguage);
 
-      // Remove the message ID from the set after processing
-      processedMessages.delete(messageId);
-
       console.log(`Successfully processed message: ${messageId}`);
     } catch (error) {
       console.error("Error processing WhatsApp message:", error);
@@ -79,8 +64,6 @@ export async function handleIncomingMessage(body) {
         userId,
         "I'm experiencing technical difficulties. Please try again later."
       );
-      // Remove the message ID from the set in case of error
-      processedMessages.delete(messageId);
     }
   } catch (error) {
     console.error("Unexpected error in handleIncomingMessage:", error);
