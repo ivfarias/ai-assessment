@@ -1,9 +1,13 @@
 import { Pinecone } from "@pinecone-database/pinecone";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import OpenAI from "openai";
+import NodeCache from "node-cache"; // Add NodeCache
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+// Initialize NodeCache with a 24-hour TTL
+const conversationCache = new NodeCache({ stdTTL: 86400, checkperiod: 3600 });
 
 const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
 const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
@@ -22,6 +26,24 @@ async function retry(fn, maxRetries = 3) {
       await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i)));
     }
   }
+}
+
+/**
+ * Get the last conversation for a user from the cache.
+ * @param {string} userId - The user's ID.
+ * @returns {object|null} - The last conversation or null if none exists.
+ */
+export function getLastConversation(userId) {
+  return conversationCache.get(userId) || null;
+}
+
+/**
+ * Set the last conversation for a user in the cache.
+ * @param {string} userId - The user's ID.
+ * @param {object} conversation - The conversation object to store.
+ */
+export function setLastConversation(userId, conversation) {
+  conversationCache.set(userId, conversation);
 }
 
 async function queryVectorStore(storeName, queryVector, options = {}) {
