@@ -25,23 +25,24 @@ async function retry(fn, maxRetries = 3) {
 }
 
 /**
- * Calls a specific vector store based on context.
- * Placeholder for additional functionality.
+ * Chama determinada vector store com base em contexto. 
+ * Placeholder para caso desejem implementar mais funcionalidades.
  */
 async function queryVectorStore(storeName, queryVector, options = {}) {
   if (storeName === "pinecone") {
-    return await retry(() => index.query({
+    return retry(() => index.query({
       topK: options.topK || 5,
       vector: queryVector,
       includeMetadata: true,
     }));
   }
-  // Placeholder for additional vector stores.
+  // Placeholder para incluir bases de conhecimento (vectore stores) diferentes. 
   throw new Error(`Vector store "${storeName}" is not implemented.`);
 }
 
 /**
- * Placeholder for external API calls.
+ *  Aqui está um placeholder para ilustrar como podemos utilizar 
+ *  o langchain para fazer chamadas de api com base em contexto.
  */
 async function queryExternalAPI(apiName, payload) {
   // Implement API call logic here
@@ -52,10 +53,9 @@ async function queryExternalAPI(apiName, payload) {
 export async function queryEmbeddings(query, options = {}) {
   console.log(`Query: "${query}"`);
 
-  // Ensure all async operations are awaited
   const queryVector = await retry(() => embeddings.embedQuery(query));
 
-  // Retrieve context from the primary vector store (Pinecone)
+  // Retorna o contexto da vector store (base de conhecimento) primária (pinecone) 
   const vectorResults = await queryVectorStore("pinecone", queryVector, options);
 
   const contexts = vectorResults.matches.map(match => ({
@@ -74,16 +74,42 @@ export async function queryEmbeddings(query, options = {}) {
     apiResults = await queryExternalAPI("mockAPI", { query, contexts });
   }
 
-  // Ensure OpenAI API call is configured to return a single response (n: 1)
   const completion = await retry(() => openai.chat.completions.create({
     model: "gpt-4",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: `Query: "${query}"\n\nContexts:\n${contexts.map(c => c.text).join('\n\n')}\n\nAPI Results:\n${JSON.stringify(apiResults)}` }
     ],
-    temperature: 0.4,
-    // Ensure n: 1 (default) is not overridden
-    n: 1, // Explicitly set to 1 to avoid multiple responses
+    temperature: 0.5,
+    max_tokens: 500,
+    presence_penalty: 0.5
+
+    // Parte avançada do prompt-engineering. Deixei as opções abaixo comentadas para caso precisem ser utilizadas:
+
+    // Limite de tokens da responsta:
+    // max_tokens: 500,
+
+    // Configuração para punir repetições (-2.0 to 2.0)
+    // frequency_penalty: 0.5,
+
+    // Configuração para punir novos tópicos de conversa (-2.0 to 2.0)
+    // presence_penalty: 0.2,
+
+    // Recurso de probabilidades de log (log probabilities) na API da OpenAI. 
+    // Isso faz com que a API retorne os valores de probabilidade logarítmica para os tokens mais relevantes.
+
+    // logprobs: 5, 
+
+    // Número de completions para trazer e então escolher a melhor
+    // n: 3, 
+
+    // Stream response (processar dados em tempo real)
+    // stream: true, 
+
+    // Stop sequence para definir o final de uma resposta
+    // stop: ["\n", "END"]
+
+    // PS: Não cheguei a testar todas.
   }));
 
   console.log('AI Response:', completion.choices[0].message.content);
