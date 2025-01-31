@@ -49,7 +49,7 @@ export function setLastConversation(userId, conversation) {
 async function queryVectorStore(storeName, queryVector, options = {}) {
   if (storeName === "pinecone") {
     return retry(() => index.query({
-      topK: options.topK || 5,
+      topK: options.topK || 7,
       vector: queryVector,
       includeMetadata: true,
     }));
