@@ -2,7 +2,6 @@ import { Pinecone } from "@pinecone-database/pinecone";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import OpenAI from "openai";
 import dotenv from 'dotenv';
-import NodeCache from "node-cache";
 
 dotenv.config();
 
@@ -13,8 +12,6 @@ const embeddings = new OpenAIEmbeddings({
   openAIApiKey: process.env.OPENAI_API_KEY,
   modelName: "text-embedding-3-large",
 });
-
-const cache = new NodeCache({ stdTTL: 3600, maxKeys: 1000 });
 
 async function retry(fn, maxRetries = 3) {
   for (let i = 0; i < maxRetries; i++) {
@@ -55,13 +52,6 @@ async function queryExternalAPI(apiName, payload) {
 
 export async function queryEmbeddings(query, options = {}) {
   console.log(`Query: "${query}"`);
-
-  const cacheKey = `${query}:${JSON.stringify(options)}`;
-  const cachedResult = cache.get(cacheKey);
-  if (cachedResult) {
-    console.log('Using cached result');
-    return cachedResult;
-  }
 
   const queryVector = await retry(() => embeddings.embedQuery(query));
 
@@ -128,15 +118,5 @@ export async function queryEmbeddings(query, options = {}) {
     answer: completion.choices[0].message.content
   };
 
-  cache.set(cacheKey, result);
-
   return result;
-}
-
-export function getLastConversation(userId) {
-  return cache.get(`lastConversation:${userId}`);
-}
-
-export function setLastConversation(userId, conversation) {
-  cache.set(`lastConversation:${userId}`, conversation, 86400);
 }
