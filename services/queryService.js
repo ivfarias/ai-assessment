@@ -81,7 +81,7 @@ export async function queryEmbeddings(query, options = {}) {
       { role: "system", content: systemPrompt },
       { role: "user", content: `Query: "${query}"\n\nContexts:\n${contexts.map(c => c.text).join('\n\n')}\n\nAPI Results:\n${JSON.stringify(apiResults)}` }
     ],
-    temperature: 0.3,
+    temperature: 0.4,
     // Ensure n: 1 (default) is not overridden
     n: 1, // Explicitly set to 1 to avoid multiple responses
   }));
