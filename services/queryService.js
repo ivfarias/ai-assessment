@@ -49,7 +49,7 @@ export function setLastConversation(userId, conversation) {
 async function queryVectorStore(storeName, queryVector, options = {}) {
   if (storeName === "pinecone") {
     return retry(() => index.query({
-      topK: options.topK || 7,
+      topK: options.topK || 5,
       vector: queryVector,
       includeMetadata: true,
     }));
@@ -90,9 +90,8 @@ export async function queryEmbeddings(query, options = {}) {
       { role: "system", content: systemPrompt },
       { role: "user", content: `Query: "${query}"\n\nContexts:\n${contexts.map(c => c.text).join('\n\n')}\n\nAPI Results:\n${JSON.stringify(apiResults)}` }
     ],
-    temperature: 0.4,
     max_tokens: 500,
-    presence_penalty: 0.5
+    presence_penalty: 1
   }));
 
   console.log('AI Response:', completion.choices[0].message.content);
