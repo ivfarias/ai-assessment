@@ -3,6 +3,7 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import NodeCache from 'node-cache';
+import { getDb } from '../config/mongodb.js';
 
 dotenv.config();
 
@@ -32,7 +33,7 @@ const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const embeddings = new OpenAIEmbeddings({
   openAIApiKey: process.env.OPENAI_API_KEY,
-  modelName: 'text-embedding-3-large',
+  modelName: 'text-embedding-ada-002', // model that generates 1536 dimensions
 });
 
 const cache = new NodeCache({ stdTTL: 3600, maxKeys: 1000 });
@@ -70,6 +71,45 @@ async function queryVectorStore({
       }),
     );
   }
+  if (storeName === 'mongodb') {
+    const db = getDb();
+    const collection = db.collection('collectionDemo');
+
+    const results = await collection
+      .aggregate([
+        {
+          $search: {
+            index: 'vectorIndex',
+            knnBeta: {
+              vector: queryVector,
+              path: 'embedding',
+              k: options.topK || 5,
+            },
+          },
+        },
+        {
+          $project: {
+            text: 1,
+            metadata: 1,
+            score: { $meta: 'searchScore' },
+            _id: 0,
+          },
+        },
+      ])
+      .toArray();
+
+    console.log('MongoDB results:', results);
+
+    return {
+      matches: results.map((doc) => ({
+        metadata: {
+          text: doc.text,
+          ...doc.metadata,
+        },
+        score: doc.score,
+      })),
+    };
+  }
   // Placeholder para incluir bases de conhecimento (vectore stores) diferentes.
   throw new Error(`Vector store "${storeName}" is not implemented.`);
 }
@@ -99,9 +139,9 @@ export async function queryEmbeddings(
 
   const queryVector = await retry(() => embeddings.embedQuery(query));
 
-  // Retorna o contexto da vector store (base de conhecimento) primária (pinecone)
+  // Retorna o contexto da vector store (base de conhecimento) primária (mongodb)
   const vectorResults = await queryVectorStore({
-    storeName: 'pinecone',
+    storeName: 'mongodb',
     queryVector,
     options,
   });
@@ -120,6 +160,10 @@ export async function queryEmbeddings(
     apiResults = await queryExternalAPI('mockAPI', { query, contexts });
   }
 
+  const content = `Query: "${query}"\n\nContexts:\n${contexts
+    .map((c) => c.text)
+    .join('\n\n')}\n\nAPI Results:\n${JSON.stringify(apiResults)}`;
+
   const completion = await retry(() =>
     openai.chat.completions.create({
       model: 'gpt-4',
@@ -127,9 +171,7 @@ export async function queryEmbeddings(
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `Query: "${query}"\n\nContexts:\n${contexts
-            .map((c) => c.text)
-            .join('\n\n')}\n\nAPI Results:\n${JSON.stringify(apiResults)}`,
+          content,
         },
       ],
       temperature: 0.3,

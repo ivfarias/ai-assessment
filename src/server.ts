@@ -1,4 +1,3 @@
-import 'module-alias/register';
 import fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';

@@ -1,8 +1,18 @@
 import { FastifyPluginAsync } from 'fastify';
 import fastifyMongodb from '@fastify/mongodb';
 import fp from 'fastify-plugin';
+import { Db } from 'mongodb';
 
-const db: FastifyPluginAsync = fp(
+let db: Db | null = null;
+
+export const getDb = (): Db => {
+  if (!db) {
+    throw new Error('Database not initialized. Make sure the MongoDB plugin is registered.');
+  }
+  return db;
+};
+
+const mongoPlugin: FastifyPluginAsync = fp(
   async (fastify) => {
     try {
       const uri = process.env.MONGODB_CONNECTION_STRING;
@@ -20,6 +30,7 @@ const db: FastifyPluginAsync = fp(
 
       const isConnected = await fastify.mongo.client.db().command({ ping: 1 });
       if (isConnected.ok) {
+        db = fastify.mongo.db;
         fastify.log.info(`Connected successfully to MongoDB database: ${dbName}`);
       }
     } catch (err) {
@@ -33,4 +44,4 @@ const db: FastifyPluginAsync = fp(
   },
 );
 
-export default db;
+export default mongoPlugin;
