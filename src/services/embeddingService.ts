@@ -1,13 +1,18 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { OpenAIEmbeddings } from "@langchain/openai";
-import { Pinecone } from "@pinecone-database/pinecone";
-import fs from "fs";
+import { OpenAIEmbeddings } from '@langchain/openai';
+import { Pinecone } from '@pinecone-database/pinecone';
+import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import LanguageDetect from 'languagedetect';
 import { retry } from 'async';
+
+interface IProgress {
+  lastProcessedFile: string | null;
+  lastProcessedConversation: string | null;
+}
 
 // Configure environment
 const __filename = fileURLToPath(import.meta.url);
@@ -18,7 +23,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 const lngDetector = new LanguageDetect();
 
 // Improved multilingual language detection
-function detectLanguage(text) {
+function detectLanguage(text: string): string {
   try {
     const detections = lngDetector.detect(text, 1);
     return detections.length > 0 ? detections[0][0] : 'unknown';
@@ -35,10 +40,10 @@ const pinecone = new Pinecone({
 
 const embeddings = new OpenAIEmbeddings({
   openAIApiKey: process.env.OPENAI_API_KEY,
-  modelName: process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-large",
+  modelName: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-large',
   configuration: {
     baseURL: process.env.OPENAI_BASE_URL,
-  }
+  },
 });
 
 const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
@@ -51,56 +56,56 @@ const textSplitter = new RecursiveCharacterTextSplitter({
 });
 
 // Batch embedding generation with retries and error skipping
-async function batchEmbeddings(chunks, batchSize = 100) {
-  const allEmbeddings = [];
-  
+async function batchEmbeddings(chunks: any[], batchSize = 100): Promise<any[]> {
+  const allEmbeddings: any[] = [];
+
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
     try {
-      await retry(
-        { times: 3, interval: 1000 },
-        async () => {
-          const batchEmbeddings = await embeddings.embedDocuments(
-            batch.map(chunk => chunk.pageContent)
-          );
-          allEmbeddings.push(...batchEmbeddings);
-        }
-      );
+      await retry({ times: 3, interval: 1000 }, async () => {
+        const batchEmbeddings = await embeddings.embedDocuments(
+          batch.map((chunk) => chunk.pageContent),
+        );
+        allEmbeddings.push(...batchEmbeddings);
+      });
     } catch (error) {
       console.error(`Error in batch ${i} to ${i + batchSize}:`, error);
       console.error('Skipping problematic batch');
       // Continue with the next batch
     }
   }
-  
+
   return allEmbeddings;
 }
 
 // Read and process JSON files
-function readJsonFile(filePath) {
-  const fileContent = fs.readFileSync(filePath, "utf8");
+function readJsonFile(filePath: string): any {
+  const fileContent = fs.readFileSync(filePath, 'utf8');
   return JSON.parse(fileContent);
 }
 
 // Progress tracking
 const progressFilePath = path.join(__dirname, 'embedding_progress.json');
 
-function loadProgress() {
+function loadProgress(): IProgress {
   if (fs.existsSync(progressFilePath)) {
     return JSON.parse(fs.readFileSync(progressFilePath, 'utf8'));
   }
   return { lastProcessedFile: null, lastProcessedConversation: null };
 }
 
-function saveProgress(progress) {
+function saveProgress(progress: IProgress) {
   fs.writeFileSync(progressFilePath, JSON.stringify(progress, null, 2));
 }
 
 // Enhanced embedding generation and storage with continuation
 async function generateAndStoreEmbeddings() {
-  const dataDirectory = path.resolve(__dirname, process.env.DATA_DIRECTORY || "../ml/cleanup/data/processed");
+  const dataDirectory = path.resolve(
+    __dirname,
+    process.env.DATA_DIRECTORY || '../ml/cleanup/data/processed',
+  );
   const files = fs.readdirSync(dataDirectory);
-  
+
   let progress = loadProgress();
   console.log(`Resuming from: ${JSON.stringify(progress)}`);
 
@@ -118,21 +123,24 @@ async function generateAndStoreEmbeddings() {
 
     const filePath = path.join(dataDirectory, file);
     const conversations = readJsonFile(filePath);
-    
+
     console.log(`Processing file: ${file} (${conversations.length} conversations)`);
 
     let conversationStartIndex = 0;
     if (fileIndex === startIndex && progress.lastProcessedConversation) {
-      conversationStartIndex = conversations.findIndex(c => c.metadata.conversation_id === progress.lastProcessedConversation) + 1;
+      conversationStartIndex =
+        conversations.findIndex(
+          (c: any) => c.metadata.conversation_id === progress.lastProcessedConversation,
+        ) + 1;
       if (conversationStartIndex === 0) conversationStartIndex = conversations.length; // If conversation not found, skip this file
     }
 
     for (let i = conversationStartIndex; i < conversations.length; i++) {
       const conversation = conversations[i];
       const { metadata, dialogue } = conversation;
-      
+
       // Combine all messages, preserving role context
-      const fullText = dialogue.map(msg => `${msg.role}: ${msg.content}`).join('\n\n');
+      const fullText = dialogue.map((msg: any) => `${msg.role}: ${msg.content}`).join('\n\n');
       const detectedLanguage = detectLanguage(fullText);
 
       try {
@@ -140,7 +148,9 @@ async function generateAndStoreEmbeddings() {
         const batchVectors = await batchEmbeddings(chunks);
 
         if (batchVectors.length !== chunks.length) {
-          console.warn(`Mismatch in chunks and vectors for conversation ${metadata.conversation_id}. Skipping.`);
+          console.warn(
+            `Mismatch in chunks and vectors for conversation ${metadata.conversation_id}. Skipping.`,
+          );
           continue;
         }
 
@@ -171,9 +181,11 @@ async function generateAndStoreEmbeddings() {
 
         // Save progress after each conversation
         saveProgress({ lastProcessedFile: file, lastProcessedConversation: conversationId });
-
       } catch (error) {
-        console.error(`Error processing conversation ${metadata.conversation_id} from ${file}:`, error);
+        console.error(
+          `Error processing conversation ${metadata.conversation_id} from ${file}:`,
+          error,
+        );
         // Continue with the next conversation
       }
     }
@@ -194,4 +206,3 @@ generateAndStoreEmbeddings()
     console.error('Critical error during multilingual embedding process:', error);
     process.exit(1);
   });
-

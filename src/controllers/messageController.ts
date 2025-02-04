@@ -2,26 +2,23 @@ import {
   queryEmbeddings,
   getLastConversation,
   setLastConversation,
-} from "../services/queryService.js";
-import {
-  sendMessageToWhatsApp,
-  markMessageAsRead,
-} from "../services/whatsappService.js";
-import { collectFeedback } from "../services/feedbackService.js";
-import { detectLanguage } from "../services/languageService.js";
+} from '../services/queryService.js';
+import { sendMessageToWhatsApp, markMessageAsRead } from '../services/whatsappService.js';
+import { collectFeedback } from '../services/feedbackService.js';
+import { detectLanguage } from '../services/languageService.js';
 
-const processedMessages = new Set();
+const processedMessages = new Set<string>();
 
-function sendFeedbackRequestAfterDelay(userId, language) {
+function sendFeedbackRequestAfterDelay(userId: string, language: string) {
   setTimeout(() => {
     collectFeedback(userId, language).catch((error) => {
-      console.error("Error sending feedback request:", error);
+      console.error('Error sending feedback request:', error);
     });
   }, 10 * 60 * 1000); // 10 minutes delay
 }
 
-export async function handleIncomingMessage(body) {
-  console.log("Entering handleIncomingMessage");
+export async function handleIncomingMessage(body: any) {
+  console.log('Entering handleIncomingMessage');
   try {
     // Check if this is a status update
     if (body.entry?.[0]?.changes?.[0]?.value?.statuses) {
@@ -31,8 +28,8 @@ export async function handleIncomingMessage(body) {
 
     // Validate incoming message structure
     const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    if (!message || message.type !== "text") {
-      console.error("Invalid or unsupported message format");
+    if (!message || message.type !== 'text') {
+      console.error('Invalid or unsupported message format');
       return;
     }
 
@@ -40,7 +37,7 @@ export async function handleIncomingMessage(body) {
     const userMessage = message.text.body;
     const userId = message.from;
 
-    console.log(`Processing message: ${messageId} from user: ${userId}`);
+    console.log(`Processing message: ${messageId} from user: ${userId}, type: ${typeof userId}`);
 
     // Check if the message has already been processed
     if (processedMessages.has(messageId)) {
@@ -53,16 +50,13 @@ export async function handleIncomingMessage(body) {
 
     console.log(`Received message: "${userMessage}"`);
 
-    let userLanguage, lastConversation;
+    let userLanguage: string, lastConversation: any;
     try {
       userLanguage = await detectLanguage(userMessage);
       lastConversation = getLastConversation(userId);
     } catch (error) {
-      console.error(
-        "Error in language detection or getting last conversation:",
-        error
-      );
-      userLanguage = "en"; // Default to English
+      console.error('Error in language detection or getting last conversation:', error);
+      userLanguage = 'en'; // Default to English
       lastConversation = null;
     }
 
@@ -90,21 +84,21 @@ export async function handleIncomingMessage(body) {
 
       console.log(`Successfully processed message: ${messageId}`);
     } catch (error) {
-      console.error("Error processing WhatsApp message:", error);
+      console.error('Error processing WhatsApp message:', error);
       await sendMessageToWhatsApp(
         userId,
-        "I'm experiencing technical difficulties. Please try again later."
+        "I'm experiencing technical difficulties. Please try again later.",
       );
       // Remove the message ID from the set in case of error
       processedMessages.delete(messageId);
     }
   } catch (error) {
-    console.error("Unexpected error in handleIncomingMessage:", error);
+    console.error('Unexpected error in handleIncomingMessage:', error);
   }
-  console.log("Exiting handleIncomingMessage");
+  console.log('Exiting handleIncomingMessage');
 }
 
-function handleStatusUpdate(body) {
+function handleStatusUpdate(body: any) {
   const status = body.entry[0].changes[0].value.statuses[0];
   console.log(`Message status update: ${status.id} - ${status.status}`);
 }
