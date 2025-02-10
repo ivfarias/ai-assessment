@@ -6,6 +6,7 @@ import NodeCache from 'node-cache';
 import { MemoryVariables } from '@langchain/core/memory';
 import { getDb } from '../config/mongodb.js';
 import { ConversationManager } from './ConversationManager.js';
+import { Collection, Document } from 'mongodb';
 
 dotenv.config();
 
@@ -71,7 +72,7 @@ async function queryMongoCollection({
   queryVector,
   topK,
 }: {
-  collection: any;
+  collection: Collection<Document>;
   queryVector: number[];
   indexName: string;
   topK: number;
