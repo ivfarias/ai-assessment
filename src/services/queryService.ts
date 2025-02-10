@@ -3,7 +3,10 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import NodeCache from 'node-cache';
+import { MemoryVariables } from '@langchain/core/memory';
 import { getDb } from '../config/mongodb.js';
+import { ConversationManager } from './ConversationManager.js';
+import { Collection, Document } from 'mongodb';
 
 dotenv.config();
 
@@ -15,6 +18,7 @@ interface QueryEmbeddingsOptions extends QueryVectorStoreOptions {
   enableAPIQuery?: boolean;
   context?: any;
   language?: string;
+  userId?: string;
 }
 
 interface QueryEmbeddingsResponse {
@@ -31,12 +35,12 @@ interface QueryEmbeddingsResponse {
 const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
 const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const cache = new NodeCache({ stdTTL: 3600, maxKeys: 1000 });
 const embeddings = new OpenAIEmbeddings({
   openAIApiKey: process.env.OPENAI_API_KEY,
   modelName: 'text-embedding-ada-002', // model that generates 1536 dimensions
 });
-
-const cache = new NodeCache({ stdTTL: 3600, maxKeys: 1000 });
+const conversationManager = new ConversationManager();
 
 async function retry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
   for (let i = 0; i < maxRetries; i++) {
@@ -53,6 +57,58 @@ async function retry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
  * Chama determinada vector store com base em contexto.
  * Placeholder para caso desejem implementar mais funcionalidades.
  */
+interface VectorSearchResult {
+  metadata: {
+    text: string;
+    [key: string]: any;
+  };
+  score: number;
+  source?: string;
+}
+
+async function queryMongoCollection({
+  collection,
+  indexName,
+  queryVector,
+  topK,
+}: {
+  collection: Collection<Document>;
+  queryVector: number[];
+  indexName: string;
+  topK: number;
+}): Promise<VectorSearchResult[]> {
+  const results = await collection
+    .aggregate([
+      {
+        $search: {
+          index: indexName,
+          knnBeta: {
+            vector: queryVector,
+            path: 'embedding',
+            k: topK || 5,
+          },
+        },
+      },
+      {
+        $project: {
+          text: 1,
+          metadata: 1,
+          score: { $meta: 'searchScore' },
+          _id: 0,
+        },
+      },
+    ])
+    .toArray();
+
+  return results.map((doc) => ({
+    metadata: {
+      text: doc.text,
+      ...doc.metadata,
+    },
+    score: doc.score,
+  }));
+}
+
 async function queryVectorStore({
   storeName,
   queryVector,
@@ -73,40 +129,34 @@ async function queryVectorStore({
   }
   if (storeName === 'mongodb') {
     const db = getDb();
-    const collection = db.collection('collectionDemo');
+    const topK = options.topK || 5;
 
-    const results = await collection
-      .aggregate([
-        {
-          $search: {
-            index: 'vectorIndex',
-            knnBeta: {
-              vector: queryVector,
-              path: 'embedding',
-              k: options.topK || 5,
-            },
-          },
-        },
-        {
-          $project: {
-            text: 1,
-            metadata: 1,
-            score: { $meta: 'searchScore' },
-            _id: 0,
-          },
-        },
-      ])
-      .toArray();
+    // Search in both collections
+    const [conversationResults, docsResults] = await Promise.all([
+      queryMongoCollection({
+        collection: db.collection('collectionDemo'),
+        queryVector,
+        indexName: 'vectorIndex',
+        topK,
+      }),
 
-    console.log('MongoDB results:', results);
+      queryMongoCollection({
+        collection: db.collection('docs'),
+        queryVector,
+        indexName: 'vectorDocsIndex',
+        topK,
+      }),
+    ]);
+
+    const allResults = [...conversationResults, ...docsResults].filter((_, index) => index <= topK);
+
+    // Sort by score and get top K results
+    const topResults = allResults.sort((a, b) => b.score - a.score).slice(0, topK);
 
     return {
-      matches: results.map((doc) => ({
-        metadata: {
-          text: doc.text,
-          ...doc.metadata,
-        },
-        score: doc.score,
+      matches: topResults.map((result) => ({
+        metadata: result.metadata,
+        score: result.score,
       })),
     };
   }
@@ -122,6 +172,19 @@ async function queryExternalAPI(apiName: string, payload: any) {
   // Implement API call logic here
   console.log(`Calling API: ${apiName} with payload:`, payload);
   return [{ data: 'Mock API response' }];
+}
+
+function formatChatHistory(chatHistory: MemoryVariables): string {
+  if (!chatHistory.chat_history || !chatHistory.chat_history.length) {
+    return 'No previous conversation';
+  }
+  const lastFiveMessages = chatHistory.chat_history.slice(-5);
+
+  return lastFiveMessages.map((msg: any) => `${msg.type}: ${msg.content}`).join('\n');
+}
+
+function formatContexts(contexts: any[]): string {
+  return contexts.map((c) => c.text).join('\n\n');
 }
 
 export async function queryEmbeddings(
@@ -150,6 +213,7 @@ export async function queryEmbeddings(
     text: match.metadata.text,
     language: match.metadata.language,
     source: match.metadata.source,
+    collection: match.metadata.source,
     score: match.score,
   }));
 
@@ -160,9 +224,20 @@ export async function queryEmbeddings(
     apiResults = await queryExternalAPI('mockAPI', { query, contexts });
   }
 
-  const content = `Query: "${query}"\n\nContexts:\n${contexts
-    .map((c) => c.text)
-    .join('\n\n')}\n\nAPI Results:\n${JSON.stringify(apiResults)}`;
+  const memory = await conversationManager.getMemory(options.userId);
+  const chatHistory = await memory.loadMemoryVariables({});
+
+  const content = [
+    `Query: "${query}"`,
+    '',
+    'Chat History:',
+    formatChatHistory(chatHistory),
+    '',
+    'Contexts:',
+    formatContexts(contexts),
+  ].join('\n');
+
+  console.log('System Prompt:', content);
 
   const completion = await retry(() =>
     openai.chat.completions.create({
@@ -175,37 +250,11 @@ export async function queryEmbeddings(
         },
       ],
       temperature: 0.3,
-
-      // Parte avançada do prompt-engineering. Deixei as opções abaixo comentadas para caso precisem ser utilizadas:
-
-      // Limite de tokens da responsta:
-      // max_tokens: 500,
-
-      // Configuração para punir repetições (-2.0 to 2.0)
-      // frequency_penalty: 0.5,
-
-      // Configuração para punir novos tópicos de conversa (-2.0 to 2.0)
-      // presence_penalty: 0.2,
-
-      // Recurso de probabilidades de log (log probabilities) na API da OpenAI.
-      // Isso faz com que a API retorne os valores de probabilidade logarítmica para os tokens mais relevantes.
-
-      // logprobs: 5,
-
-      // Número de completions para trazer e então escolher a melhor
-      // n: 3,
-
-      // Stream response (processar dados em tempo real)
-      // stream: true,
-
-      // Stop sequence para definir o final de uma resposta
-      // stop: ["\n", "END"]
-
-      // PS: Não cheguei a testar todas.
     }),
   );
 
-  console.log('AI Response:', completion.choices[0].message.content);
+  // Save the interaction to memory
+  await memory.saveContext({ input: query }, { output: completion.choices[0].message.content });
 
   const result: QueryEmbeddingsResponse = {
     matches: contexts,
