@@ -56,6 +56,58 @@ async function retry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
  * Chama determinada vector store com base em contexto.
  * Placeholder para caso desejem implementar mais funcionalidades.
  */
+interface VectorSearchResult {
+  metadata: {
+    text: string;
+    [key: string]: any;
+  };
+  score: number;
+  source?: string;
+}
+
+async function queryMongoCollection({
+  collection,
+  indexName,
+  queryVector,
+  topK,
+}: {
+  collection: any;
+  queryVector: number[];
+  indexName: string;
+  topK: number;
+}): Promise<VectorSearchResult[]> {
+  const results = await collection
+    .aggregate([
+      {
+        $search: {
+          index: indexName,
+          knnBeta: {
+            vector: queryVector,
+            path: 'embedding',
+            k: topK || 5,
+          },
+        },
+      },
+      {
+        $project: {
+          text: 1,
+          metadata: 1,
+          score: { $meta: 'searchScore' },
+          _id: 0,
+        },
+      },
+    ])
+    .toArray();
+
+  return results.map((doc) => ({
+    metadata: {
+      text: doc.text,
+      ...doc.metadata,
+    },
+    score: doc.score,
+  }));
+}
+
 async function queryVectorStore({
   storeName,
   queryVector,
@@ -76,40 +128,34 @@ async function queryVectorStore({
   }
   if (storeName === 'mongodb') {
     const db = getDb();
-    const collection = db.collection('collectionDemo');
+    const topK = options.topK || 5;
 
-    const results = await collection
-      .aggregate([
-        {
-          $search: {
-            index: 'vectorIndex',
-            knnBeta: {
-              vector: queryVector,
-              path: 'embedding',
-              k: options.topK || 5,
-            },
-          },
-        },
-        {
-          $project: {
-            text: 1,
-            metadata: 1,
-            score: { $meta: 'searchScore' },
-            _id: 0,
-          },
-        },
-      ])
-      .toArray();
+    // Search in both collections
+    const [conversationResults, docsResults] = await Promise.all([
+      queryMongoCollection({
+        collection: db.collection('collectionDemo'),
+        queryVector,
+        indexName: 'vectorIndex',
+        topK,
+      }),
 
-    console.log('MongoDB results:', results);
+      queryMongoCollection({
+        collection: db.collection('docs'),
+        queryVector,
+        indexName: 'vectorDocsIndex',
+        topK,
+      }),
+    ]);
+
+    const allResults = [...conversationResults, ...docsResults].filter((_, index) => index <= topK);
+
+    // Sort by score and get top K results
+    const topResults = allResults.sort((a, b) => b.score - a.score).slice(0, topK);
 
     return {
-      matches: results.map((doc) => ({
-        metadata: {
-          text: doc.text,
-          ...doc.metadata,
-        },
-        score: doc.score,
+      matches: topResults.map((result) => ({
+        metadata: result.metadata,
+        score: result.score,
       })),
     };
   }
@@ -131,8 +177,9 @@ function formatChatHistory(chatHistory: MemoryVariables): string {
   if (!chatHistory.chat_history || !chatHistory.chat_history.length) {
     return 'No previous conversation';
   }
+  const lastFiveMessages = chatHistory.chat_history.slice(-5);
 
-  return chatHistory.chat_history.map((msg: any) => `${msg.type}: ${msg.content}`).join('\n');
+  return lastFiveMessages.map((msg: any) => `${msg.type}: ${msg.content}`).join('\n');
 }
 
 function formatContexts(contexts: any[]): string {
@@ -165,6 +212,7 @@ export async function queryEmbeddings(
     text: match.metadata.text,
     language: match.metadata.language,
     source: match.metadata.source,
+    collection: match.metadata.source,
     score: match.score,
   }));
 
