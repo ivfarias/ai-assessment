@@ -1,34 +1,32 @@
-import { queryEmbeddings, getLastConversation, setLastConversation } from "../services/queryService.js";
-import { sendMessageToWhatsApp, markMessageAsRead } from "../services/whatsappService.js";
-import { collectFeedback } from "../services/feedbackService.js";
-import { detectLanguage } from "../services/languageService.js";
+import {
+  queryEmbeddings,
+  getLastConversation,
+  setLastConversation,
+} from '../services/queryService.js';
+import { sendMessageToWhatsApp, markMessageAsRead } from '../services/whatsappService.js';
+import { collectFeedback } from '../services/feedbackService.js';
+import { detectLanguage } from '../services/languageService.js';
 
 // Use a Set to track processed message IDs
-const processedMessages = new Set();
+const processedMessages = new Set<string>();
 
 /**
  * Sends a feedback request to the user after a delay.
- * @param {string} userId - The user's ID.
- * @param {string} language - The user's language.
  */
-function sendFeedbackRequestAfterDelay(userId, language) {
+function sendFeedbackRequestAfterDelay(userId: string, language: string) {
   setTimeout(async () => {
     try {
       console.log(`Attempting to send feedback request to user: ${userId}`);
       await collectFeedback(userId, language);
       console.log(`Feedback request sent successfully to user: ${userId}`);
     } catch (error) {
-      console.error("Error sending feedback request:", error);
+      console.error('Error sending feedback request:', error);
     }
   }, 10 * 60 * 1000); // 10 minutes delay
 }
 
-/**
- * Handles incoming WhatsApp messages.
- * @param {object} body - The incoming request body from WhatsApp.
- */
-export async function handleIncomingMessage(body) {
-  console.log("Entering handleIncomingMessage");
+export async function handleIncomingMessage(body: any) {
+  console.log('Entering handleIncomingMessage');
   try {
     // Check if this is a status update
     if (body.entry?.[0]?.changes?.[0]?.value?.statuses) {
@@ -38,8 +36,8 @@ export async function handleIncomingMessage(body) {
 
     // Validate incoming message structure
     const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    if (!message || message.type !== "text") {
-      console.error("Invalid or unsupported message format");
+    if (!message || message.type !== 'text') {
+      console.error('Invalid or unsupported message format');
       return;
     }
 
@@ -47,7 +45,7 @@ export async function handleIncomingMessage(body) {
     const userMessage = message.text.body;
     const userId = message.from;
 
-    console.log(`Processing message: ${messageId} from user: ${userId}`);
+    console.log(`Processing message: ${messageId} from user: ${userId}, type: ${typeof userId}`);
 
     // Check if the message has already been processed
     if (processedMessages.has(messageId)) {
@@ -60,23 +58,23 @@ export async function handleIncomingMessage(body) {
 
     console.log(`Received message: "${userMessage}"`);
 
-    let userLanguage, lastConversation;
+    let userLanguage: string, lastConversation: any;
     try {
       userLanguage = await detectLanguage(userMessage);
       console.log(`Detected user language: ${userLanguage}`);
       lastConversation = getLastConversation(userId); // Get last conversation from cache
       console.log(`Retrieved last conversation for user: ${userId}`);
     } catch (error) {
-      console.error("Error in language detection or getting last conversation:", error);
-      userLanguage = 'pt'; // Default to Portuguese
+      console.error('Error in language detection or getting last conversation:', error);
+      userLanguage = 'en'; // Default to English
       lastConversation = null;
     }
 
     try {
-      // Query the AI embeddings for a response (with conversation history)
       const aiResponse = await queryEmbeddings(userMessage, {
+        context: lastConversation,
         language: userLanguage,
-        context: lastConversation // Pass last conversation as context
+        userId,
       });
       console.log(`AI Response: "${aiResponse.answer}"`);
 
@@ -84,16 +82,11 @@ export async function handleIncomingMessage(body) {
       await sendMessageToWhatsApp(userId, aiResponse.answer);
       console.log(`Message sent to user: ${userId}`);
 
-      // Mark the message as read
-      await markMessageAsRead(messageId);
-      console.log(`Message marked as read: ${messageId}`);
-
-      // Update the last conversation for this user in the cache
+      // Update the last conversation for this user
       setLastConversation(userId, {
         query: userMessage,
-        response: aiResponse.answer
+        response: aiResponse.answer,
       });
-      console.log(`Updated last conversation for user: ${userId}`);
 
       // Send feedback request after delay
       sendFeedbackRequestAfterDelay(userId, userLanguage);
@@ -103,10 +96,10 @@ export async function handleIncomingMessage(body) {
       processedMessages.delete(messageId);
       console.log(`Message ${messageId} removed from processed messages set.`);
     } catch (error) {
-      console.error("Error processing WhatsApp message:", error);
+      console.error('Error processing WhatsApp message:', error);
       await sendMessageToWhatsApp(
         userId,
-        "I'm experiencing technical difficulties. Please try again later."
+        "I'm experiencing technical difficulties. Please try again later.",
       );
       console.log(`Error message sent to user: ${userId}`);
 
@@ -115,16 +108,16 @@ export async function handleIncomingMessage(body) {
       console.log(`Message ${messageId} removed from processed messages set due to error.`);
     }
   } catch (error) {
-    console.error("Unexpected error in handleIncomingMessage:", error);
+    console.error('Unexpected error in handleIncomingMessage:', error);
   }
-  console.log("Exiting handleIncomingMessage");
+  console.log('Exiting handleIncomingMessage');
 }
 
 /**
  * Handles WhatsApp message status updates.
  * @param {object} body - The incoming request body from WhatsApp.
  */
-function handleStatusUpdate(body) {
+function handleStatusUpdate(body: any) {
   const status = body.entry[0].changes[0].value.statuses[0];
   console.log(`Message status update: ${status.id} - ${status.status}`);
 }
