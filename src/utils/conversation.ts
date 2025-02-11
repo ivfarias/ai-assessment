@@ -1,9 +1,26 @@
-export function detectConversationType(query: string): 'greeting' | 'question' | 'general' {
-  const greetings = /^(olá|oi|hello|hi|hey|hola)$/i;
-  const questionIndicators = /\?|como|what|how|why|quando|where|qual|pode|can|could/i;
+import { MemoryVariables } from 'langchain/memory';
 
-  if (greetings.test(query.trim())) return 'greeting';
-  if (questionIndicators.test(query)) return 'question';
+export function detectConversationType(
+  query: string,
+  chatHistory: MemoryVariables,
+): 'greeting' | 'question' | 'general' {
+  const cleanQuery = query.toLowerCase().trim();
+
+  const onlyGreeting = /^(olá|ola|oi|hello|hi|hey|hola|bom dia|boa tarde|boa noite)$/i;
+  const questionIndicators =
+    /\?|como|what|how|why|quando|where|qual|pode|can|could|preciso|quero|gostaria/i;
+
+  if (
+    onlyGreeting.test(cleanQuery) &&
+    (!chatHistory.chat_history || !chatHistory.chat_history.length)
+  ) {
+    return 'greeting';
+  }
+
+  if (questionIndicators.test(cleanQuery)) {
+    return 'question';
+  }
+
   return 'general';
 }
 
@@ -42,4 +59,49 @@ export function weightContextRelevance(query: string, contexts: any[]): any[] {
       };
     })
     .sort((a, b) => b.score - a.score);
+}
+
+export function formatChatHistory(chatHistory: MemoryVariables): string {
+  if (!chatHistory.chat_history || !chatHistory.chat_history.length) {
+    return 'No previous conversation';
+  }
+  const lastFiveMessages = chatHistory.chat_history.slice(-5);
+
+  return lastFiveMessages.map((msg: any) => `${msg.type}: ${msg.content}`).join('\n');
+}
+
+export function formatContexts(contexts: any[]): string {
+  return contexts.map((c) => c.text).join('\n\n');
+}
+
+export function formatPromptContent(
+  query: string,
+  conversationType: string,
+  chatHistory: MemoryVariables,
+  contexts: any[],
+) {
+  const formattedHistory = formatChatHistory(chatHistory);
+
+  if (conversationType === 'greeting') {
+    return [
+      `Query: "${query}"`,
+      `Conversation Type: ${conversationType}`,
+      '',
+      'Chat History:',
+      formattedHistory,
+      '',
+      'Instructions: This is just a greeting. Respond naturally without assuming any support context.',
+    ].join('\n');
+  }
+
+  return [
+    `Query: "${query}"`,
+    `Conversation Type: ${conversationType}`,
+    '',
+    'Chat History:',
+    formattedHistory,
+    '',
+    'Contexts:',
+    formatContexts(contexts),
+  ].join('\n');
 }

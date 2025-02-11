@@ -7,7 +7,12 @@ import { MemoryVariables } from '@langchain/core/memory';
 import { getDb } from '../config/mongodb.js';
 import { ConversationManager } from './ConversationManager.js';
 import { Collection, Document } from 'mongodb';
-import { detectConversationType, weightContextRelevance } from '../utils/conversation.js';
+import {
+  detectConversationType,
+  formatChatHistory,
+  formatContexts,
+  weightContextRelevance,
+} from '../utils/conversation.js';
 
 dotenv.config();
 
@@ -175,19 +180,6 @@ async function queryExternalAPI(apiName: string, payload: any) {
   return [{ data: 'Mock API response' }];
 }
 
-function formatChatHistory(chatHistory: MemoryVariables): string {
-  if (!chatHistory.chat_history || !chatHistory.chat_history.length) {
-    return 'No previous conversation';
-  }
-  const lastFiveMessages = chatHistory.chat_history.slice(-5);
-
-  return lastFiveMessages.map((msg: any) => `${msg.type}: ${msg.content}`).join('\n');
-}
-
-function formatContexts(contexts: any[]): string {
-  return contexts.map((c) => c.text).join('\n\n');
-}
-
 export async function queryEmbeddings(
   query: string,
   options: QueryEmbeddingsOptions = {},
@@ -229,7 +221,7 @@ export async function queryEmbeddings(
   const memory = await conversationManager.getMemory(options.userId);
   const chatHistory = await memory.loadMemoryVariables({});
 
-  const conversationType = detectConversationType(query);
+  const conversationType = detectConversationType(query, chatHistory);
   const content = [
     `Query: "${query}"`,
     `Conversation Type: ${conversationType}`,

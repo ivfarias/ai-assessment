@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import NodeCache from 'node-cache';
 import { getDb } from '../config/mongodb.js';
 import { ConversationManager } from './ConversationManager.js';
-import { detectConversationType, weightContextRelevance } from '../utils/conversation.js';
+import { detectConversationType, formatChatHistory, formatContexts, weightContextRelevance, } from '../utils/conversation.js';
 dotenv.config();
 const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
 const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
@@ -107,16 +107,6 @@ async function queryExternalAPI(apiName, payload) {
     console.log(`Calling API: ${apiName} with payload:`, payload);
     return [{ data: 'Mock API response' }];
 }
-function formatChatHistory(chatHistory) {
-    if (!chatHistory.chat_history || !chatHistory.chat_history.length) {
-        return 'No previous conversation';
-    }
-    const lastFiveMessages = chatHistory.chat_history.slice(-5);
-    return lastFiveMessages.map((msg) => `${msg.type}: ${msg.content}`).join('\n');
-}
-function formatContexts(contexts) {
-    return contexts.map((c) => c.text).join('\n\n');
-}
 export async function queryEmbeddings(query, options = {}) {
     console.log(`Query: "${query}"`);
     const cacheKey = `${query}:${JSON.stringify(options)}`;
@@ -145,7 +135,7 @@ export async function queryEmbeddings(query, options = {}) {
     }
     const memory = await conversationManager.getMemory(options.userId);
     const chatHistory = await memory.loadMemoryVariables({});
-    const conversationType = detectConversationType(query);
+    const conversationType = detectConversationType(query, chatHistory);
     const content = [
         `Query: "${query}"`,
         `Conversation Type: ${conversationType}`,
