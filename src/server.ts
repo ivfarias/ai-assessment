@@ -3,9 +3,9 @@ import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
 import cors from '@fastify/cors';
 import dotenv from 'dotenv';
-import indexRouter from '@/routes/index.js';
-import { logger } from '@/middleware/logger.js';
-import db from '@/config/mongodb.js';
+import indexRouter from './routes/index.js';
+import { logger } from './middleware/logger.js';
+import db from './config/mongodb.js';
 
 dotenv.config();
 
