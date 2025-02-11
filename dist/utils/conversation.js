@@ -1,16 +1,3 @@
-export function detectConversationType(query, chatHistory) {
-    const cleanQuery = query.toLowerCase().trim();
-    const onlyGreeting = /^(olá|ola|oi|hello|hi|hey|hola|bom dia|boa tarde|boa noite)$/i;
-    const questionIndicators = /\?|como|what|how|why|quando|where|qual|pode|can|could|preciso|quero|gostaria/i;
-    if (onlyGreeting.test(cleanQuery) &&
-        (!chatHistory.chat_history || !chatHistory.chat_history.length)) {
-        return 'greeting';
-    }
-    if (questionIndicators.test(cleanQuery)) {
-        return 'question';
-    }
-    return 'general';
-}
 export function weightContextRelevance(query, contexts) {
     const cleanQuery = query.toLowerCase().trim();
     return contexts

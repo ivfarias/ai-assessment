@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import NodeCache from 'node-cache';
 import { getDb } from '../config/mongodb.js';
 import { ConversationManager } from './ConversationManager.js';
-import { detectConversationType, formatChatHistory, formatContexts, weightContextRelevance, } from '../utils/conversation.js';
+import { formatChatHistory, formatContexts, weightContextRelevance, } from '../utils/conversation.js';
 dotenv.config();
 const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
 const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
@@ -107,6 +107,38 @@ async function queryExternalAPI(apiName, payload) {
     console.log(`Calling API: ${apiName} with payload:`, payload);
     return [{ data: 'Mock API response' }];
 }
+async function analyzeUserIntent(query) {
+    const completion = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+            {
+                role: 'system',
+                content: `Analyze the user's message intent and classify it in a JSON format with the following fields:
+            - isGreeting (boolean): contains any kind of greeting or salutation
+            - hasQuestion (boolean): contains a question or inquiry
+            - needsSupport (boolean): requires technical or customer support
+            - topic (string): main topic of the message (or "none" if there isn't one)
+            
+            Examples:
+            "hello" -> {"isGreeting": true, "hasQuestion": false, "needsSupport": false, "topic": "none"}
+            "hi, how do I change my email?" -> {"isGreeting": true, "hasQuestion": true, "needsSupport": true, "topic": "email"}
+            "I'm having issues with payment" -> {"isGreeting": false, "hasQuestion": false, "needsSupport": true, "topic": "payment"}
+            "buenas tardes, necesito ayuda con mi cuenta" -> {"isGreeting": true, "hasQuestion": false, "needsSupport": true, "topic": "account"}
+            "olá, tudo bem?" -> {"isGreeting": true, "hasQuestion": true, "needsSupport": false, "topic": "none"}
+
+            Notes:
+            - The user may write in English, Portuguese or Spanish
+            - A greeting alone should not be considered as needing support
+            - The topic should be specific and relevant to support context
+            - Casual questions like "how are you?" should not be marked as needsSupport`,
+            },
+            { role: 'user', content: query },
+        ],
+        temperature: 0,
+        response_format: { type: 'json_object' },
+    });
+    return JSON.parse(completion.choices[0].message.content);
+}
 export async function queryEmbeddings(query, options = {}) {
     console.log(`Query: "${query}"`);
     const cacheKey = `${query}:${JSON.stringify(options)}`;
@@ -116,6 +148,27 @@ export async function queryEmbeddings(query, options = {}) {
         return cachedResult;
     }
     const queryVector = await retry(() => embeddings.embedQuery(query));
+    const intent = await analyzeUserIntent(query);
+    const systemPrompt = process.env.SYSTEM_PROMPT;
+    if (intent.isGreeting && !intent.hasQuestion && !intent.needsSupport) {
+        const completion = await retry(() => openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [
+                { role: 'system', content: systemPrompt },
+                {
+                    role: 'user',
+                    content: `Query: "${query}"\nType: Greeting\n\nRespond in a friendly and natural way, without assuming any supporting context`,
+                },
+            ],
+            temperature: 0.7,
+            max_tokens: 500,
+        }));
+        return {
+            matches: [],
+            apiResults: [],
+            answer: completion.choices[0].message.content,
+        };
+    }
     // Retorna o contexto da vector store (base de conhecimento) primária (mongodb)
     const vectorResults = await queryVectorStore({
         storeName: 'mongodb',
@@ -125,25 +178,22 @@ export async function queryEmbeddings(query, options = {}) {
     const contexts = weightContextRelevance(query, vectorResults.matches.map((match) => ({
         text: match.metadata.text,
         language: match.metadata.language,
-        source: match.metadata.source,
         score: match.score,
     })));
-    const systemPrompt = process.env.SYSTEM_PROMPT;
     let apiResults = [];
     if (options.enableAPIQuery) {
         apiResults = await queryExternalAPI('mockAPI', { query, contexts });
     }
     const memory = await conversationManager.getMemory(options.userId);
     const chatHistory = await memory.loadMemoryVariables({});
-    const conversationType = detectConversationType(query, chatHistory);
     const content = [
         `Query: "${query}"`,
-        `Conversation Type: ${conversationType}`,
+        `Intent: ${JSON.stringify(intent)}`,
         '',
         'Chat History:',
         formatChatHistory(chatHistory),
         '',
-        'Contexts:',
+        'Relevant contexts:',
         formatContexts(contexts),
     ].join('\n');
     console.log('System Prompt:', content);
