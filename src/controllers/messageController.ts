@@ -82,6 +82,9 @@ export async function handleIncomingMessage(body: any) {
       await sendMessageToWhatsApp(userId, aiResponse.answer);
       console.log(`Message sent to user: ${userId}`);
 
+      // Mark the message as read
+      await markMessageAsRead(messageId);
+
       // Update the last conversation for this user
       setLastConversation(userId, {
         query: userMessage,
