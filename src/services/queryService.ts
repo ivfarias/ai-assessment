@@ -7,6 +7,7 @@ import { MemoryVariables } from '@langchain/core/memory';
 import { getDb } from '../config/mongodb.js';
 import { ConversationManager } from './ConversationManager.js';
 import { Collection, Document } from 'mongodb';
+import { detectConversationType, weightContextRelevance } from '../utils/conversation.js';
 
 dotenv.config();
 
@@ -209,14 +210,15 @@ export async function queryEmbeddings(
     options,
   });
 
-  const contexts = vectorResults.matches.map((match: any) => ({
-    text: match.metadata.text,
-    language: match.metadata.language,
-    source: match.metadata.source,
-    collection: match.metadata.source,
-    score: match.score,
-  }));
-
+  const contexts = weightContextRelevance(
+    query,
+    vectorResults.matches.map((match) => ({
+      text: match.metadata.text,
+      language: match.metadata.language,
+      source: match.metadata.source,
+      score: match.score,
+    })),
+  );
   const systemPrompt = process.env.SYSTEM_PROMPT;
 
   let apiResults = [];
@@ -227,8 +229,10 @@ export async function queryEmbeddings(
   const memory = await conversationManager.getMemory(options.userId);
   const chatHistory = await memory.loadMemoryVariables({});
 
+  const conversationType = detectConversationType(query);
   const content = [
     `Query: "${query}"`,
+    `Conversation Type: ${conversationType}`,
     '',
     'Chat History:',
     formatChatHistory(chatHistory),
@@ -249,10 +253,10 @@ export async function queryEmbeddings(
           content,
         },
       ],
-      temperature: 0.3,
-      max_tokens: 500,
-      presence_penalty: 0.1,
-      frequency_penalty: 0.5,
+      // temperature: 0.3,
+      // max_tokens: 500,
+      // presence_penalty: 0.1,
+      // frequency_penalty: 0.5,
     }),
   );
 

@@ -1,5 +1,5 @@
 import { queryEmbeddings, getLastConversation, setLastConversation, } from '../services/queryService.js';
-import { sendMessageToWhatsApp } from '../services/whatsappService.js';
+import { sendMessageToWhatsApp, markMessageAsRead } from '../services/whatsappService.js';
 import { collectFeedback } from '../services/feedbackService.js';
 import { detectLanguage } from '../services/languageService.js';
 // Use a Set to track processed message IDs
@@ -67,6 +67,8 @@ export async function handleIncomingMessage(body) {
             // Send the AI response to WhatsApp
             await sendMessageToWhatsApp(userId, aiResponse.answer);
             console.log(`Message sent to user: ${userId}`);
+            // Mark the message as read
+            await markMessageAsRead(messageId);
             // Update the last conversation for this user
             setLastConversation(userId, {
                 query: userMessage,

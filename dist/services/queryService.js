@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import NodeCache from 'node-cache';
 import { getDb } from '../config/mongodb.js';
 import { ConversationManager } from './ConversationManager.js';
+import { detectConversationType, weightContextRelevance } from '../utils/conversation.js';
 dotenv.config();
 const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
 const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
@@ -131,13 +132,12 @@ export async function queryEmbeddings(query, options = {}) {
         queryVector,
         options,
     });
-    const contexts = vectorResults.matches.map((match) => ({
+    const contexts = weightContextRelevance(query, vectorResults.matches.map((match) => ({
         text: match.metadata.text,
         language: match.metadata.language,
         source: match.metadata.source,
-        collection: match.metadata.source,
         score: match.score,
-    }));
+    })));
     const systemPrompt = process.env.SYSTEM_PROMPT;
     let apiResults = [];
     if (options.enableAPIQuery) {
@@ -145,8 +145,10 @@ export async function queryEmbeddings(query, options = {}) {
     }
     const memory = await conversationManager.getMemory(options.userId);
     const chatHistory = await memory.loadMemoryVariables({});
+    const conversationType = detectConversationType(query);
     const content = [
         `Query: "${query}"`,
+        `Conversation Type: ${conversationType}`,
         '',
         'Chat History:',
         formatChatHistory(chatHistory),
@@ -164,10 +166,10 @@ export async function queryEmbeddings(query, options = {}) {
                 content,
             },
         ],
-        temperature: 0.3,
-        max_tokens: 500,
-        presence_penalty: 0.1,
-        frequency_penalty: 0.5,
+        // temperature: 0.3,
+        // max_tokens: 500,
+        // presence_penalty: 0.1,
+        // frequency_penalty: 0.5,
     }));
     // Save the interaction to memory
     await memory.saveContext({ input: query }, { output: completion.choices[0].message.content });
