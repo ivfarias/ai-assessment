@@ -300,7 +300,7 @@ export async function queryEmbeddings(
         },
       ],
       // temperature: 0.3,
-      // max_tokens: 500,
+      max_tokens: 500,
       // presence_penalty: 0.1,
       // frequency_penalty: 0.5,
     }),
