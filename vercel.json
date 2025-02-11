@@ -13,7 +13,7 @@
         }
     ],
     "functions": {
-        "dist/server.js": {
+        "dist/**/*.js": {
             "maxDuration": 60
         }
     }
