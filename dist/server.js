@@ -8,9 +8,9 @@ import { logger } from './middleware/logger.js';
 import db from './config/mongodb.js';
 dotenv.config();
 const app = fastify({
-    logger: true, // Habilita o logger do Fastify
+    logger: true,
 });
-const start = async () => {
+const setupServer = async () => {
     try {
         // Database
         await app.register(db);
@@ -22,7 +22,7 @@ const start = async () => {
         app.addHook('onRequest', logger);
         // Routes
         await app.register(indexRouter);
-        // Catch 404 and forward to error handler
+        // Catch 404
         app.setNotFoundHandler((_, reply) => {
             reply.status(404).send({ error: 'Not Found' });
         });
@@ -35,23 +35,38 @@ const start = async () => {
                 method: request.method,
                 body: request.body,
             });
-            // Send error response
             reply.status(error.statusCode || 500).send({
                 message: error.message,
                 error: process.env.NODE_ENV === 'development' ? error : {},
             });
         });
-        if (process.env.NODE_ENV !== 'production') {
-            const PORT = Number(process.env.PORT) || 3000;
-            await app.listen({ port: PORT });
-            console.log(`Server is running on port ${PORT}`);
-        }
+        return app;
     }
-    catch (err) {
-        console.error('Failed to start server:', err);
-        process.exit(1);
+    catch (error) {
+        console.error('Failed to setup server:', error);
+        throw error;
     }
 };
-start();
-export default app;
+// Para desenvolvimento local
+if (process.env.NODE_ENV !== 'production') {
+    const start = async () => {
+        try {
+            const server = await setupServer();
+            await server.listen({
+                port: Number(process.env.PORT) || 3000,
+                host: 'localhost',
+            });
+        }
+        catch (err) {
+            console.error('Failed to start server:', err);
+            process.exit(1);
+        }
+    };
+    start();
+}
+export default async (req, res) => {
+    const server = await setupServer();
+    await server.ready();
+    server.server.emit('request', req, res);
+};
 //# sourceMappingURL=server.js.map
