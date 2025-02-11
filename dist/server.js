@@ -7,10 +7,14 @@ import indexRouter from './routes/index.js';
 import { logger } from './middleware/logger.js';
 import db from './config/mongodb.js';
 dotenv.config();
-const app = fastify({
-    logger: true,
-});
+let serverInstance = null;
 const setupServer = async () => {
+    if (serverInstance) {
+        return serverInstance;
+    }
+    const app = fastify({
+        logger: true,
+    });
     try {
         // Database
         await app.register(db);
@@ -40,6 +44,8 @@ const setupServer = async () => {
                 error: process.env.NODE_ENV === 'development' ? error : {},
             });
         });
+        await app.ready();
+        serverInstance = app;
         return app;
     }
     catch (error) {
@@ -47,7 +53,7 @@ const setupServer = async () => {
         throw error;
     }
 };
-// Para desenvolvimento local
+// local development
 if (process.env.NODE_ENV !== 'production') {
     const start = async () => {
         try {
@@ -65,8 +71,14 @@ if (process.env.NODE_ENV !== 'production') {
     start();
 }
 export default async (req, res) => {
-    const server = await setupServer();
-    await server.ready();
-    server.server.emit('request', req, res);
+    try {
+        const server = await setupServer();
+        server.server.emit('request', req, res);
+    }
+    catch (error) {
+        console.error('Error handling request:', error);
+        res.statusCode = 500;
+        res.end('Internal Server Error');
+    }
 };
 //# sourceMappingURL=server.js.map
