@@ -249,7 +249,7 @@ export async function queryEmbeddings(
           content,
         },
       ],
-      temperature: 0.2,
+      temperature: 0.3,
       max_tokens: 500,
       presence_penalty: 0.1,
       frequency_penalty: 0.5,
