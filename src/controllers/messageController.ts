@@ -6,9 +6,10 @@ import {
 import { sendMessageToWhatsApp, markMessageAsRead } from '../services/whatsappService.js';
 import { collectFeedback } from '../services/feedbackService.js';
 import { detectLanguage } from '../services/languageService.js';
+import NodeCache from 'node-cache';
 
-// Use a Set to track processed message IDs
-const processedMessages = new Set<string>();
+// Replace Set with NodeCache for better memory management
+const processedMessages = new NodeCache({ stdTTL: 300, maxKeys: 10000 }); // 5 minute TTL
 
 /**
  * Sends a feedback request to the user after a delay.
@@ -44,17 +45,19 @@ export async function handleIncomingMessage(body: any) {
     const messageId = message.id;
     const userMessage = message.text.body;
     const userId = message.from;
+    const timestamp = message.timestamp || Date.now();
 
-    console.log(`Processing message: ${messageId} from user: ${userId}, type: ${typeof userId}`);
+    // Create a unique key combining message ID and timestamp
+    const processKey = `${messageId}-${timestamp}`;
 
     // Check if the message has already been processed
-    if (processedMessages.has(messageId)) {
+    if (processedMessages.get(processKey)) {
       console.log(`Message ${messageId} has already been processed. Skipping.`);
       return;
     }
 
-    // Add the message ID to the set of processed messages
-    processedMessages.add(messageId);
+    // Mark message as being processed
+    processedMessages.set(processKey, true);
 
     console.log(`Received message: "${userMessage}"`);
 
@@ -75,7 +78,14 @@ export async function handleIncomingMessage(body: any) {
         context: lastConversation,
         language: userLanguage,
         userId,
+        messageId: processKey, // Pass the process key to queryEmbeddings
       });
+
+      if (!aiResponse) {
+        console.log(`Duplicate or invalid response for message ${messageId}. Skipping.`);
+        return;
+      }
+
       console.log(`AI Response: "${aiResponse.answer}"`);
 
       // Send the AI response to WhatsApp
@@ -96,7 +106,7 @@ export async function handleIncomingMessage(body: any) {
       console.log(`Scheduled feedback request for user: ${userId}`);
 
       // Remove the message ID from the set after processing
-      processedMessages.delete(messageId);
+      processedMessages.del(processKey);
       console.log(`Message ${messageId} removed from processed messages set.`);
     } catch (error) {
       console.error('Error processing WhatsApp message:', error);
@@ -107,7 +117,7 @@ export async function handleIncomingMessage(body: any) {
       console.log(`Error message sent to user: ${userId}`);
 
       // Remove the message ID from the set in case of error
-      processedMessages.delete(messageId);
+      processedMessages.del(processKey);
       console.log(`Message ${messageId} removed from processed messages set due to error.`);
     }
   } catch (error) {

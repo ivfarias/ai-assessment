@@ -23,6 +23,7 @@ interface QueryEmbeddingsOptions extends QueryVectorStoreOptions {
   context?: any;
   language?: string;
   userId?: string;
+  messageId?: string;
 }
 
 interface QueryEmbeddingsResponse {
@@ -40,6 +41,7 @@ const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
 const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const cache = new NodeCache({ stdTTL: 3600, maxKeys: 1000 });
+const messageCache = new NodeCache({ stdTTL: 300, maxKeys: 10000 }); // 5 minute TTL for message tracking
 const embeddings = new OpenAIEmbeddings({
   openAIApiKey: process.env.OPENAI_API_KEY,
   modelName: 'text-embedding-ada-002', // model that generates 1536 dimensions
@@ -216,6 +218,12 @@ export async function queryEmbeddings(
   query: string,
   options: QueryEmbeddingsOptions = {},
 ): Promise<QueryEmbeddingsResponse | any> {
+  const messageId = options.messageId;
+  if (messageId && messageCache.get(messageId)) {
+    console.log(`Duplicate message detected: ${messageId}`);
+    return null;
+  }
+
   console.log(`Query: "${query}"`);
 
   const cacheKey = `${query}:${JSON.stringify(options)}`;
@@ -315,6 +323,9 @@ export async function queryEmbeddings(
     answer: completion.choices[0].message.content,
   };
 
+  if (messageId) {
+    messageCache.set(messageId, true);
+  }
   cache.set(cacheKey, result);
 
   return result;
