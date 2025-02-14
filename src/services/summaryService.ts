@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import { MemoryVariables } from 'langchain/memory';
-import { formatChatHistory } from '@/utils/conversation.js';
+import { formatChatHistory } from '../utils/conversation.js';
 import { detectLanguage } from './languageService.js';
 
 dotenv.config();

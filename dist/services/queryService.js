@@ -204,6 +204,7 @@ export async function queryEmbeddings(query, options = {}) {
         'Relevant contexts:',
         formatContexts(contexts),
     ].join('\n');
+    console.log('Chatbot input:', content);
     const completion = await retry(() => openai.chat.completions.create({
         model: 'gpt-4',
         messages: [

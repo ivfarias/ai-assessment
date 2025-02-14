@@ -296,6 +296,7 @@ export async function queryEmbeddings(
     formatContexts(contexts),
   ].join('\n');
 
+  console.log('Chatbot input:', content);
 
   const completion = await retry(() =>
     openai.chat.completions.create({
