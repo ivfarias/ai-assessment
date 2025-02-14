@@ -7,10 +7,10 @@ import { getDb } from '../config/mongodb.js';
 import { ConversationManager } from './ConversationManager.js';
 import { Collection, Document } from 'mongodb';
 import {
-  formatChatHistory,
   formatContexts,
   weightContextRelevance,
 } from '../utils/conversation.js';
+import { summarizeChatHistory } from './summaryService.js';
 
 dotenv.config();
 
@@ -283,19 +283,19 @@ export async function queryEmbeddings(
 
   const memory = await conversationManager.getMemory(options.userId);
   const chatHistory = await memory.loadMemoryVariables({});
+  const historySummary = await summarizeChatHistory(chatHistory);
 
   const content = [
     `Query: "${query}"`,
     `Intent: ${JSON.stringify(intent)}`,
     '',
-    'Chat History:',
-    formatChatHistory(chatHistory),
+    'Conversation Summary:',
+    historySummary,
     '',
     'Relevant contexts:',
     formatContexts(contexts),
   ].join('\n');
 
-  console.log('System Prompt:', content);
 
   const completion = await retry(() =>
     openai.chat.completions.create({
