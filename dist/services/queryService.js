@@ -5,7 +5,8 @@ import dotenv from 'dotenv';
 import NodeCache from 'node-cache';
 import { getDb } from '../config/mongodb.js';
 import { ConversationManager } from './ConversationManager.js';
-import { formatChatHistory, formatContexts, weightContextRelevance, } from '../utils/conversation.js';
+import { formatContexts, weightContextRelevance, } from '../utils/conversation.js';
+import { summarizeChatHistory } from './summaryService.js';
 dotenv.config();
 const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
 const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
@@ -192,17 +193,17 @@ export async function queryEmbeddings(query, options = {}) {
     }
     const memory = await conversationManager.getMemory(options.userId);
     const chatHistory = await memory.loadMemoryVariables({});
+    const historySummary = await summarizeChatHistory(chatHistory);
     const content = [
         `Query: "${query}"`,
         `Intent: ${JSON.stringify(intent)}`,
         '',
-        'Chat History:',
-        formatChatHistory(chatHistory),
+        'Conversation Summary:',
+        historySummary,
         '',
         'Relevant contexts:',
         formatContexts(contexts),
     ].join('\n');
-    console.log('System Prompt:', content);
     const completion = await retry(() => openai.chat.completions.create({
         model: 'gpt-4',
         messages: [
