@@ -138,13 +138,13 @@ async function queryVectorStore({
     const topK = options.topK || 5;
 
     // Search in both collections
-    const [conversationResults, docsResults] = await Promise.all([
-      queryMongoCollection({
-        collection: db.collection('collectionDemo'),
-        queryVector,
-        indexName: 'vectorIndex',
-        topK,
-      }),
+    const [docsResults] = await Promise.all([
+      // queryMongoCollection({
+      //   collection: db.collection('collectionDemo'),
+      //   queryVector,
+      //   indexName: 'vectorIndex',
+      //   topK,
+      // }),
 
       queryMongoCollection({
         collection: db.collection('docs'),
@@ -154,7 +154,7 @@ async function queryVectorStore({
       }),
     ]);
 
-    const allResults = [...conversationResults, ...docsResults].filter((_, index) => index <= topK);
+    const allResults = [...docsResults].filter((_, index) => index <= topK);
 
     // Sort by score and get top K results
     const topResults = allResults.sort((a, b) => b.score - a.score).slice(0, topK);
