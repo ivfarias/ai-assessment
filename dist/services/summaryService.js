@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
-import { formatChatHistory } from '@/utils/conversation.js';
+import { formatChatHistory } from '../utils/conversation.js';
 import { detectLanguage } from './languageService.js';
 dotenv.config();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
