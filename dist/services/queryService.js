@@ -11,6 +11,7 @@ const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
 const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const cache = new NodeCache({ stdTTL: 3600, maxKeys: 1000 });
+const messageCache = new NodeCache({ stdTTL: 300, maxKeys: 10000 }); // 5 minute TTL for message tracking
 const embeddings = new OpenAIEmbeddings({
     openAIApiKey: process.env.OPENAI_API_KEY,
     modelName: 'text-embedding-ada-002', // model that generates 1536 dimensions
@@ -71,13 +72,13 @@ async function queryVectorStore({ storeName, queryVector, options = {}, }) {
         const db = getDb();
         const topK = options.topK || 5;
         // Search in both collections
-        const [conversationResults, docsResults] = await Promise.all([
-            queryMongoCollection({
-                collection: db.collection('collectionDemo'),
-                queryVector,
-                indexName: 'vectorIndex',
-                topK,
-            }),
+        const [docsResults] = await Promise.all([
+            // queryMongoCollection({
+            //   collection: db.collection('collectionDemo'),
+            //   queryVector,
+            //   indexName: 'vectorIndex',
+            //   topK,
+            // }),
             queryMongoCollection({
                 collection: db.collection('docs'),
                 queryVector,
@@ -85,7 +86,7 @@ async function queryVectorStore({ storeName, queryVector, options = {}, }) {
                 topK,
             }),
         ]);
-        const allResults = [...conversationResults, ...docsResults].filter((_, index) => index <= topK);
+        const allResults = [...docsResults].filter((_, index) => index <= topK);
         // Sort by score and get top K results
         const topResults = allResults.sort((a, b) => b.score - a.score).slice(0, topK);
         return {
@@ -140,6 +141,11 @@ async function analyzeUserIntent(query) {
     return JSON.parse(completion.choices[0].message.content);
 }
 export async function queryEmbeddings(query, options = {}) {
+    const messageId = options.messageId;
+    if (messageId && messageCache.get(messageId)) {
+        console.log(`Duplicate message detected: ${messageId}`);
+        return null;
+    }
     console.log(`Query: "${query}"`);
     const cacheKey = `${query}:${JSON.stringify(options)}`;
     const cachedResult = cache.get(cacheKey);
@@ -207,7 +213,7 @@ export async function queryEmbeddings(query, options = {}) {
             },
         ],
         // temperature: 0.3,
-        // max_tokens: 500,
+        max_tokens: 500,
         // presence_penalty: 0.1,
         // frequency_penalty: 0.5,
     }));
@@ -218,6 +224,9 @@ export async function queryEmbeddings(query, options = {}) {
         apiResults,
         answer: completion.choices[0].message.content,
     };
+    if (messageId) {
+        messageCache.set(messageId, true);
+    }
     cache.set(cacheKey, result);
     return result;
 }
