@@ -26,7 +26,6 @@ logs/
 snapshopt.py
 
 # Build artifacts
-dist/
 build/
 .cache/
 .tmp/
@@ -62,4 +61,6 @@ yarn.lock
 pnpm-lock.yaml
 .vercel
 
-data
+// ...existing code...
+data/processed/*
+!data/processed/.gitkeep

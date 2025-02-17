@@ -1,19 +1,25 @@
-import fastify from 'fastify';
+import fastify, { FastifyInstance } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
 import cors from '@fastify/cors';
 import dotenv from 'dotenv';
-import indexRouter from '@/routes/index.js';
-import { logger } from '@/middleware/logger.js';
-import db from '@/config/mongodb.js';
+import indexRouter from './routes/index.js';
+import { logger } from './middleware/logger.js';
+import db from './config/mongodb.js';
 
 dotenv.config();
 
-const app = fastify({
-  logger: true, // Habilita o logger do Fastify
-});
+let serverInstance: FastifyInstance = null;
 
-const start = async () => {
+const setupServer = async () => {
+  if (serverInstance) {
+    return serverInstance;
+  }
+
+  const app = fastify({
+    logger: true,
+  });
+
   try {
     // Database
     await app.register(db);
@@ -29,7 +35,7 @@ const start = async () => {
     // Routes
     await app.register(indexRouter);
 
-    // Catch 404 and forward to error handler
+    // Catch 404
     app.setNotFoundHandler((_, reply) => {
       reply.status(404).send({ error: 'Not Found' });
     });
@@ -44,24 +50,46 @@ const start = async () => {
         body: request.body,
       });
 
-      // Send error response
       reply.status(error.statusCode || 500).send({
         message: error.message,
         error: process.env.NODE_ENV === 'development' ? error : {},
       });
     });
 
-    if (process.env.NODE_ENV !== 'production') {
-      const PORT = Number(process.env.PORT) || 3000;
-      await app.listen({ port: PORT });
-      console.log(`Server is running on port ${PORT}`);
-    }
-  } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
+    await app.ready();
+
+    serverInstance = app;
+    return app;
+  } catch (error) {
+    console.error('Failed to setup server:', error);
+    throw error;
   }
 };
 
-start();
+// local development
+if (process.env.NODE_ENV !== 'production') {
+  const start = async () => {
+    try {
+      const server = await setupServer();
+      await server.listen({
+        port: Number(process.env.PORT) || 3000,
+        host: 'localhost',
+      });
+    } catch (err) {
+      console.error('Failed to start server:', err);
+      process.exit(1);
+    }
+  };
+  start();
+}
 
-export default app;
+export default async (req, res) => {
+  try {
+    const server = await setupServer();
+    server.server.emit('request', req, res);
+  } catch (error) {
+    console.error('Error handling request:', error);
+    res.statusCode = 500;
+    res.end('Internal Server Error');
+  }
+};

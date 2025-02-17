@@ -6,14 +6,23 @@ import {
 import { sendMessageToWhatsApp, markMessageAsRead } from '../services/whatsappService.js';
 import { collectFeedback } from '../services/feedbackService.js';
 import { detectLanguage } from '../services/languageService.js';
+import NodeCache from 'node-cache';
 
-const processedMessages = new Set<string>();
+// Replace Set with NodeCache for better memory management
+const processedMessages = new NodeCache({ stdTTL: 300, maxKeys: 10000 }); // 5 minute TTL
 
+/**
+ * Sends a feedback request to the user after a delay.
+ */
 function sendFeedbackRequestAfterDelay(userId: string, language: string) {
-  setTimeout(() => {
-    collectFeedback(userId, language).catch((error) => {
+  setTimeout(async () => {
+    try {
+      console.log(`Attempting to send feedback request to user: ${userId}`);
+      await collectFeedback(userId, language);
+      console.log(`Feedback request sent successfully to user: ${userId}`);
+    } catch (error) {
       console.error('Error sending feedback request:', error);
-    });
+    }
   }, 10 * 60 * 1000); // 10 minutes delay
 }
 
@@ -36,24 +45,28 @@ export async function handleIncomingMessage(body: any) {
     const messageId = message.id;
     const userMessage = message.text.body;
     const userId = message.from;
+    const timestamp = message.timestamp || Date.now();
 
-    console.log(`Processing message: ${messageId} from user: ${userId}, type: ${typeof userId}`);
+    // Create a unique key combining message ID and timestamp
+    const processKey = `${messageId}-${timestamp}`;
 
     // Check if the message has already been processed
-    if (processedMessages.has(messageId)) {
+    if (processedMessages.get(processKey)) {
       console.log(`Message ${messageId} has already been processed. Skipping.`);
       return;
     }
 
-    // Add the message ID to the set of processed messages
-    processedMessages.add(messageId);
+    // Mark message as being processed
+    processedMessages.set(processKey, true);
 
     console.log(`Received message: "${userMessage}"`);
 
     let userLanguage: string, lastConversation: any;
     try {
       userLanguage = await detectLanguage(userMessage);
-      lastConversation = getLastConversation(userId);
+      console.log(`Detected user language: ${userLanguage}`);
+      lastConversation = getLastConversation(userId); // Get last conversation from cache
+      console.log(`Retrieved last conversation for user: ${userId}`);
     } catch (error) {
       console.error('Error in language detection or getting last conversation:', error);
       userLanguage = 'en'; // Default to English
@@ -65,10 +78,21 @@ export async function handleIncomingMessage(body: any) {
         context: lastConversation,
         language: userLanguage,
         userId,
+        messageId: processKey, // Pass the process key to queryEmbeddings
       });
+
+      if (!aiResponse) {
+        console.log(`Duplicate or invalid response for message ${messageId}. Skipping.`);
+        return;
+      }
+
       console.log(`AI Response: "${aiResponse.answer}"`);
 
+      // Send the AI response to WhatsApp
       await sendMessageToWhatsApp(userId, aiResponse.answer);
+      console.log(`Message sent to user: ${userId}`);
+
+      // Mark the message as read
       await markMessageAsRead(messageId);
 
       // Update the last conversation for this user
@@ -79,19 +103,22 @@ export async function handleIncomingMessage(body: any) {
 
       // Send feedback request after delay
       sendFeedbackRequestAfterDelay(userId, userLanguage);
+      console.log(`Scheduled feedback request for user: ${userId}`);
 
       // Remove the message ID from the set after processing
-      processedMessages.delete(messageId);
-
-      console.log(`Successfully processed message: ${messageId}`);
+      processedMessages.del(processKey);
+      console.log(`Message ${messageId} removed from processed messages set.`);
     } catch (error) {
       console.error('Error processing WhatsApp message:', error);
       await sendMessageToWhatsApp(
         userId,
         "I'm experiencing technical difficulties. Please try again later.",
       );
+      console.log(`Error message sent to user: ${userId}`);
+
       // Remove the message ID from the set in case of error
-      processedMessages.delete(messageId);
+      processedMessages.del(processKey);
+      console.log(`Message ${messageId} removed from processed messages set due to error.`);
     }
   } catch (error) {
     console.error('Unexpected error in handleIncomingMessage:', error);
@@ -99,6 +126,10 @@ export async function handleIncomingMessage(body: any) {
   console.log('Exiting handleIncomingMessage');
 }
 
+/**
+ * Handles WhatsApp message status updates.
+ * @param {object} body - The incoming request body from WhatsApp.
+ */
 function handleStatusUpdate(body: any) {
   const status = body.entry[0].changes[0].value.statuses[0];
   console.log(`Message status update: ${status.id} - ${status.status}`);
