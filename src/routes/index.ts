@@ -1,10 +1,12 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { handleIncomingMessage } from '../controllers/messageController.js';
 import dotenv from 'dotenv';
+import { MessageController } from '../controllers/message.controller.js';
 
 dotenv.config();
 
 async function routes(app: FastifyInstance) {
+  const messageController = new MessageController();
+
   app.get('/', async (_: FastifyRequest, reply: FastifyReply) => {
     reply.status(200).send({ message: 'Kyte AI API is running' });
   });
@@ -33,7 +35,7 @@ async function routes(app: FastifyInstance) {
         processedMessages.add(messageId);
 
         // Process the message
-        await handleIncomingMessage(request.body);
+        await messageController.handleWebhook(request, reply);
 
         // Remove the message ID from the set after some time (e.g., 5 minutes)
         const timeout = 5 * 60 * 1000; // 5 minutes
