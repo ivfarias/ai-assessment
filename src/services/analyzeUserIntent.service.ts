@@ -1,9 +1,17 @@
 import { IintentMessage } from '@/domain/interfaces/assistant.js';
 import OpenAI from 'openai';
 
+/**
+ * Service responsible for analyzing and classifying user message intents
+ */
 export default class AnalyzeUserIntentService {
   private openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+  /**
+   * Analyzes a user's message to determine its intent and classification
+   * @param query - The user's input message to analyze
+   * @returns An object containing intent analysis (isGreeting, hasQuestion, needsSupport, topic)
+   */
   public async getQueryIntent(query: string): Promise<IintentMessage> {
     try {
       const completion = await this.openai.chat.completions.create({
