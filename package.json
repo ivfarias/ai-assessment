@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node ./dist/server.js",
     "build": "npx tsc",
-    "dev": "tsx watch -r dotenv/config ./src/server.ts"
+    "dev": "tsx watch -r dotenv/config ./src/server.ts",
+    "process-embedding": "node --loader ts-node/esm ./src/scripts/mongoEmbeddingService.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
