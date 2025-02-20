@@ -1,39 +1,18 @@
 import { BufferMemory } from 'langchain/memory';
 import { MongoDBChatMessageHistory } from '@langchain/mongodb';
-import { getDb } from '../config/mongodb.js';
-import fastify from 'fastify';
-import mongodb from '../config/mongodb.js';
+import { Collection } from 'mongodb';
+import { IConversationMemoryManager } from '../../domain/interfaces/conversation.js';
 
-export class ConversationManager {
+export default class ConversationMemoryManager implements IConversationMemoryManager {
   private memories: Map<string, BufferMemory>;
-  private collection: any;
-  private initialized: boolean = false;
+  private collection: Collection;
 
-  constructor() {
+  constructor(collection: Collection) {
     this.memories = new Map();
-  }
-
-  async initialize() {
-    if (!this.initialized) {
-      try {
-        const app = fastify({ logger: true });
-        await app.register(mongodb);
-
-        const db = getDb();
-        this.collection = db.collection('chat-history');
-        this.initialized = true;
-      } catch (error) {
-        console.error('Failed to initialize MongoDB connection:', error);
-        throw error;
-      }
-    }
+    this.collection = collection;
   }
 
   async getMemory(userId: string): Promise<BufferMemory> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-
     if (!this.memories.has(userId)) {
       const chatHistory = new MongoDBChatMessageHistory({
         collection: this.collection,
@@ -50,6 +29,7 @@ export class ConversationManager {
 
       this.memories.set(userId, memory);
     }
+    
     return this.memories.get(userId)!;
   }
 }

@@ -1,18 +1,26 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { handleIncomingMessage } from '../controllers/messageController.js';
 import dotenv from 'dotenv';
+import { MessageController } from '../controllers/message.controller.js';
+import { webhookPostSchema, webhookVerificationSchema } from '../schemas/webhook.schema.js';
+import { healthCheckSchema } from '../schemas/system.schema.js';
 
 dotenv.config();
 
 async function routes(app: FastifyInstance) {
-  app.get('/', async (_: FastifyRequest, reply: FastifyReply) => {
+  const messageController = new MessageController();
+
+  app.get('/', {
+    schema: healthCheckSchema
+  }, async (_: FastifyRequest, reply: FastifyReply) => {
     reply.status(200).send({ message: 'Kyte AI API is running' });
   });
 
   const processedMessages = new Set<string>();
 
   // Webhook endpoint for WhatsApp
-  app.post('/webhook', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/webhook', {
+    schema: webhookPostSchema
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     console.log('Received POST request to /webhook');
     console.log('Request body:', JSON.stringify(request.body, null, 2));
 
@@ -33,7 +41,7 @@ async function routes(app: FastifyInstance) {
         processedMessages.add(messageId);
 
         // Process the message
-        await handleIncomingMessage(request.body);
+        await messageController.handleWebhook(request, reply);
 
         // Remove the message ID from the set after some time (e.g., 5 minutes)
         const timeout = 5 * 60 * 1000; // 5 minutes
@@ -50,7 +58,9 @@ async function routes(app: FastifyInstance) {
   });
 
   // Webhook verification
-  app.get('/webhook', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.get('/webhook', {
+    schema: webhookVerificationSchema
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const mode = request.query['hub.mode'];
     const token = request.query['hub.verify_token'];
     const challenge = request.query['hub.challenge'];
