@@ -1,13 +1,20 @@
-import { handleIncomingMessage } from '../controllers/messageController.js';
 import dotenv from 'dotenv';
+import { MessageController } from '../controllers/message.controller.js';
+import { webhookPostSchema, webhookVerificationSchema } from '../schemas/webhook.schema.js';
+import { healthCheckSchema } from '../schemas/system.schema.js';
 dotenv.config();
 async function routes(app) {
-    app.get('/', async (_, reply) => {
+    const messageController = new MessageController();
+    app.get('/', {
+        schema: healthCheckSchema
+    }, async (_, reply) => {
         reply.status(200).send({ message: 'Kyte AI API is running' });
     });
     const processedMessages = new Set();
     // Webhook endpoint for WhatsApp
-    app.post('/webhook', async (request, reply) => {
+    app.post('/webhook', {
+        schema: webhookPostSchema
+    }, async (request, reply) => {
         console.log('Received POST request to /webhook');
         console.log('Request body:', JSON.stringify(request.body, null, 2));
         try {
@@ -23,7 +30,7 @@ async function routes(app) {
                 // Add the message ID to the set of processed messages
                 processedMessages.add(messageId);
                 // Process the message
-                await handleIncomingMessage(request.body);
+                await messageController.handleWebhook(request, reply);
                 // Remove the message ID from the set after some time (e.g., 5 minutes)
                 const timeout = 5 * 60 * 1000; // 5 minutes
                 setTimeout(() => {
@@ -38,7 +45,9 @@ async function routes(app) {
         }
     });
     // Webhook verification
-    app.get('/webhook', async (request, reply) => {
+    app.get('/webhook', {
+        schema: webhookVerificationSchema
+    }, async (request, reply) => {
         const mode = request.query['hub.mode'];
         const token = request.query['hub.verify_token'];
         const challenge = request.query['hub.challenge'];
