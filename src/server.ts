@@ -34,7 +34,7 @@ const setupServer = async () => {
           description: 'Assistant AI API Documentation',
           version: '1.0.0'
         },
-        host: 'localhost:3000',
+        host: process.env.NODE_ENV === 'production' ? 'kyte-ai.vercel.app' : 'localhost:3000',
         schemes: ['http', 'https'],
         consumes: ['application/json'],
         produces: ['application/json'],
