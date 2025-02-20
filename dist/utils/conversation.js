@@ -1,37 +1,13 @@
-export function weightContextRelevance(query, contexts) {
-    const cleanQuery = query.toLowerCase().trim();
-    return contexts
-        .map((context) => {
-        const cleanContext = context.text.toLowerCase();
-        let relevanceMultiplier = 1;
-        const isOnlyGreeting = /^(olá|oi|hello|hi|hey|hola)$/i.test(cleanContext);
-        if (isOnlyGreeting) {
-            relevanceMultiplier *= 0.5;
-        }
-        const queryWords = cleanQuery.split(/\s+/).filter((word) => {
-            return word.length > 2 && !/^(olá|oi|hello|hi|hey|hola)$/i.test(word);
-        });
-        const matchingWords = queryWords.filter((word) => cleanContext.includes(word));
-        if (matchingWords.length > 0) {
-            relevanceMultiplier *= 1 + matchingWords.length / queryWords.length;
-        }
-        const isGenericShortResponse = cleanContext.length < 20 && /^(ok|sim|não|yes|no)$/i.test(cleanContext);
-        if (isGenericShortResponse) {
-            relevanceMultiplier *= 0.7;
-        }
-        return {
-            ...context,
-            score: context.score * relevanceMultiplier,
-        };
-    })
-        .sort((a, b) => b.score - a.score);
-}
 export function formatChatHistory(chatHistory) {
     if (!chatHistory.chat_history || !chatHistory.chat_history.length) {
         return 'No previous conversation';
     }
     const lastFiveMessages = chatHistory.chat_history.slice(-5);
-    return lastFiveMessages.map((msg) => `${msg.type}: ${msg.content}`).join('\n');
+    const formattedHistory = lastFiveMessages.map((message) => {
+        const role = 'tool_calls' in message ? 'Assistant' : 'User';
+        return `${role}: ${message.content}`;
+    });
+    return formattedHistory.join('\n');
 }
 export function formatContexts(contexts) {
     return contexts.map((c) => c.text).join('\n\n');

@@ -80,20 +80,37 @@ export default class QueryService {
      * @returns Promise containing the query response
      */
     async processComplexQuery(query, intent, options) {
+        const docsCollection = getDb().collection('docs');
+        const macroCsCollection = getDb().collection('collectionDemo');
         const queryVector = await this.openAIService.createEmbedding(query);
-        const vectorResults = await this.vectorRepository.searchSimilar(queryVector, options.topK);
+        const topK = 5;
+        const docsVectorResults = await this.vectorRepository.searchSimilar({
+            queryVector,
+            topK,
+            index: 'vectorDocsIndex',
+            collection: docsCollection,
+        });
+        const macroCsVectorResults = await this.vectorRepository.searchSimilar({
+            queryVector,
+            topK,
+            index: 'vectorIndex',
+            collection: macroCsCollection,
+        });
+        const topResults = [...docsVectorResults, ...macroCsVectorResults]
+            .sort((a, b) => b.score - a.score)
+            .filter((_, index) => index <= topK);
         const memory = await this.conversationManager.getMemory(options.userId);
         const chatHistory = await memory.loadMemoryVariables({});
         const historySummary = await this.summaryService.summarizeChatHistory(chatHistory);
         const answer = await this.completionService.generateContextualResponse({
             query,
             intent,
-            vectorResults,
+            vectorResults: topResults,
             historySummary,
         });
         await memory.saveContext({ input: query }, { output: answer });
         return {
-            matches: vectorResults,
+            matches: topResults,
             answer,
         };
     }

@@ -1,4 +1,4 @@
-import { Collection } from 'mongodb';
+import { Collection, Document } from 'mongodb';
 import { getDb } from '../config/mongodb.js';
 import { IVectorResult } from '../domain/interfaces/vectorRepository.js';
 
@@ -18,12 +18,22 @@ export default class VectorRepository {
    * @param topK - Number of similar documents to return (default: 5)
    * @returns Promise containing array of vector search results
    */
-  async searchSimilar(queryVector: number[], topK: number = 5): Promise<IVectorResult[]> {
-    const results = await this.collection
+  async searchSimilar({
+    queryVector,
+    topK = 5,
+    index,
+    collection,
+  }: {
+    queryVector: number[];
+    topK: number;
+    index: string;
+    collection: Collection<Document>; 
+  }): Promise<IVectorResult[]> {
+    const results = await collection
       .aggregate([
         {
           $search: {
-            index: 'vectorDocsIndex',
+            index,
             knnBeta: {
               vector: queryVector,
               path: 'embedding',

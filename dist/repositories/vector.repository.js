@@ -13,12 +13,12 @@ export default class VectorRepository {
      * @param topK - Number of similar documents to return (default: 5)
      * @returns Promise containing array of vector search results
      */
-    async searchSimilar(queryVector, topK = 5) {
-        const results = await this.collection
+    async searchSimilar({ queryVector, topK = 5, index, collection, }) {
+        const results = await collection
             .aggregate([
             {
                 $search: {
-                    index: 'vectorDocsIndex',
+                    index,
                     knnBeta: {
                         vector: queryVector,
                         path: 'embedding',
