@@ -6,11 +6,6 @@ import { IVectorResult } from '../domain/interfaces/vectorRepository.js';
  * Repository class for handling vector-based document searches in MongoDB
  */
 export default class VectorRepository {
-  private collection: Collection;
-
-  constructor() {
-    this.collection = getDb().collection('docs');
-  }
 
   /**
    * Searches for documents similar to the provided vector embedding
