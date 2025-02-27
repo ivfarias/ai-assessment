@@ -8,8 +8,6 @@ export async function documentRoutes(app: FastifyInstance) {
     schema: documentSchema
   }, async (request: FastifyRequest<{ Body: TDocumentsPayload }>, reply: FastifyReply) => {
     try {
-      console.log('Received POST request to /process-document', request.body);
-      
       // Validate request body
       const validationResult = documentsPayloadSchema.safeParse(request.body);
       

@@ -13,4 +13,4 @@ export const documentsPayloadSchema = z.object({
     .min(1, 'At least one article is required')
 });
 
-export type TDocumentsPayload = z.infer<typeof documentsPayloadSchema>;
+export type TDocumentsPayload = z.infer<typeof documentsPayloadSchema>; 
