@@ -55,4 +55,25 @@ export const documentSchema = {
       }
     }
   }
-}
+};
+
+export const cleanupSchema = {
+  tags: ['documents'],
+  description: 'Clean up stored documents or chat history',
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        status: { type: 'string' },
+        message: { type: 'string' }
+      }
+    },
+    500: {
+      type: 'object',
+      properties: {
+        status: { type: 'string' },
+        message: { type: 'string' }
+      }
+    }
+  }
+};
