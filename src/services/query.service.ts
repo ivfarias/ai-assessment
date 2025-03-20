@@ -25,7 +25,7 @@ export default class QueryService {
     this.openAIService = new OpenAIService();
     this.messageCache = new MessageCache();
     this.vectorRepository = new VectorRepository();
-    this.conversationManager = new ConversationManager(getDb().collection('chat-history'));
+    this.conversationManager = new ConversationManager(getDb().collection('ChatHistory'));
     this.analyzeUserIntent = new AnalyzeUserIntentService();
     this.summaryService = new SummaryService();
     this.completionService = new CompletionService(this.openAIService);
@@ -102,22 +102,23 @@ export default class QueryService {
     intent: IintentMessage,
     options: IQueryOptions,
   ): Promise<IQueryResponse> {
-    const docsCollection = getDb().collection('docs');
-    const macroCsCollection = getDb().collection('collectionDemo');
+    const docsCollection = getDb().collection('KyteDocs');
+    const macroCsCollection = getDb().collection('MacroCS');
     const queryVector = await this.openAIService.createEmbedding(query);
     const topK = 5;
     const docsVectorResults = await this.vectorRepository.searchSimilar({
       queryVector,
       topK,
-      index: 'vectorDocsIndex',
+      index: 'docs_search_index',
       collection: docsCollection,
     });
     const macroCsVectorResults = await this.vectorRepository.searchSimilar({
       queryVector,
       topK,
-      index: 'vectorIndex',
+      index: 'macro_cs_search_index',
       collection: macroCsCollection,
     });
+
     const topResults = [...docsVectorResults, ...macroCsVectorResults]
       .sort((a, b) => b.score - a.score)
       .filter((_, index) => index <= topK);

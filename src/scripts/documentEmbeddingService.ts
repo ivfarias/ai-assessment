@@ -30,7 +30,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function processAndStoreDocument(document: IArticleInput) {
   try {
     const db = getDb();
-    const collection = db.collection('teste');
+    const collection = db.collection('MacroCS');
     const documentId = uuidv4();
 
     const combinedContent = `Root Cause: ${document.root_cause}\nContent: ${document.content}`;

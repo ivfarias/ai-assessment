@@ -1,5 +1,4 @@
 import { Collection, Document } from 'mongodb';
-import { getDb } from '../config/mongodb.js';
 import { IVectorResult } from '../domain/interfaces/vectorRepository.js';
 
 /**
@@ -27,20 +26,19 @@ export default class VectorRepository {
     const results = await collection
       .aggregate([
         {
-          $search: {
+          $vectorSearch: {
             index,
-            knnBeta: {
-              vector: queryVector,
-              path: 'embedding',
-              k: topK,
-            },
-          },
+            path: 'embedding',
+            queryVector,
+            limit: topK,
+            numCandidates: topK * 10
+          }
         },
         {
           $project: {
             text: 1,
             metadata: 1,
-            score: { $meta: 'searchScore' },
+            score: { $meta: 'vectorSearchScore' },
             _id: 0,
           },
         },

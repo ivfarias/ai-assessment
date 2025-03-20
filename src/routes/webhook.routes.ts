@@ -36,7 +36,6 @@ export async function webhookRoutes(app: FastifyInstance) {
           processedMessages.delete(messageId);
         }, timeout);
       }
-      console.log('lorem ipsum');
       
       return reply.status(200).send({ status: 'success' });
     } catch (error) {
