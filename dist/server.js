@@ -34,7 +34,8 @@ const setupServer = async () => {
                 produces: ['application/json'],
                 tags: [
                     { name: 'webhook', description: 'WhatsApp Webhook endpoints' },
-                    { name: 'system', description: 'System endpoints' }
+                    { name: 'system', description: 'System endpoints' },
+                    { name: 'documents', description: 'Documents processing endpoints' }
                 ],
             }
         });

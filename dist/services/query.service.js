@@ -21,7 +21,7 @@ export default class QueryService {
         this.openAIService = new OpenAIService();
         this.messageCache = new MessageCache();
         this.vectorRepository = new VectorRepository();
-        this.conversationManager = new ConversationManager(getDb().collection('chat-history'));
+        this.conversationManager = new ConversationManager(getDb().collection('ChatHistory'));
         this.analyzeUserIntent = new AnalyzeUserIntentService();
         this.summaryService = new SummaryService();
         this.completionService = new CompletionService(this.openAIService);
@@ -80,20 +80,20 @@ export default class QueryService {
      * @returns Promise containing the query response
      */
     async processComplexQuery(query, intent, options) {
-        const docsCollection = getDb().collection('docs');
-        const macroCsCollection = getDb().collection('collectionDemo');
+        const docsCollection = getDb().collection('KyteDocs');
+        const macroCsCollection = getDb().collection('MacroCS');
         const queryVector = await this.openAIService.createEmbedding(query);
         const topK = 5;
         const docsVectorResults = await this.vectorRepository.searchSimilar({
             queryVector,
             topK,
-            index: 'vectorDocsIndex',
+            index: 'docs_search_index',
             collection: docsCollection,
         });
         const macroCsVectorResults = await this.vectorRepository.searchSimilar({
             queryVector,
             topK,
-            index: 'vectorIndex',
+            index: 'macro_cs_search_index',
             collection: macroCsCollection,
         });
         const topResults = [...docsVectorResults, ...macroCsVectorResults]
@@ -102,6 +102,7 @@ export default class QueryService {
         const memory = await this.conversationManager.getMemory(options.userId);
         const chatHistory = await memory.loadMemoryVariables({});
         const historySummary = await this.summaryService.summarizeChatHistory(chatHistory);
+        console.log('database', process.env.MONGODB_CONNECTION_STRING);
         const answer = await this.completionService.generateContextualResponse({
             query,
             intent,

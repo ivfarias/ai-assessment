@@ -32,7 +32,6 @@ export class MessageController {
             await this.whatsAppService.sendMessage(message.from, response.answer);
             await this.whatsAppService.markMessageAsRead(message.id);
             this.scheduleFeedbackRequest(message.from, response.language);
-            return reply.send({ status: 'success' });
         }
         catch (error) {
             console.error('Message processing error:', error);
