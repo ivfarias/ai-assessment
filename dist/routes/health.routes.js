@@ -1,5 +1,5 @@
 import { healthCheckSchema } from '../schemas/system.schema.js';
-import { getDb } from '@/config/mongodb.js';
+import { getDb } from '../config/mongodb.js';
 export async function healthRoutes(app) {
     app.get('/', {
         schema: healthCheckSchema
