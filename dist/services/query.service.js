@@ -102,7 +102,6 @@ export default class QueryService {
         const memory = await this.conversationManager.getMemory(options.userId);
         const chatHistory = await memory.loadMemoryVariables({});
         const historySummary = await this.summaryService.summarizeChatHistory(chatHistory);
-        console.log('database', process.env.MONGODB_CONNECTION_STRING);
         const answer = await this.completionService.generateContextualResponse({
             query,
             intent,

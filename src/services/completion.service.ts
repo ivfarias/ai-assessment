@@ -59,8 +59,6 @@ export default class CompletionService {
     ].join('\n');
 
     console.log('Contextual response content:', content);
-    console.log({context});
-    
 
     const response = await this.openAIService.createChatCompletion({
       messages: [
