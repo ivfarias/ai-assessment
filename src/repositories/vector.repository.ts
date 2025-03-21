@@ -45,7 +45,7 @@ export default class VectorRepository {
       ])
       .toArray();
     console.log('index', index);
-    console.log('Vector search results:', results);
+    console.log('Vector search results:', results.length);
     
 
     return results.map((doc) => ({
