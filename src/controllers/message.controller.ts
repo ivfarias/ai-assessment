@@ -31,12 +31,6 @@ export class MessageController {
         return reply.status(400).send({ error: 'Invalid message format' });
       }
 
-      const isDuplicateMessage = this.messageCache.isDuplicateMessage(userId);
-
-      if (isDuplicateMessage) {
-        return reply.send({ status: 'Duplicated message' });
-      }
-
       const response = await this.whatsAppService.handleMessage(message);
 
       await this.whatsAppService.sendMessage(message.from, response.answer);

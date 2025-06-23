@@ -11,10 +11,3 @@ export interface IQueryResponse {
   matches: IVectorResult[];
   answer: string;
 }
-
-export interface IUserIntent {
-  isGreeting: boolean;
-  hasQuestion: boolean;
-  needsSupport: boolean;
-  topic: string;
-}

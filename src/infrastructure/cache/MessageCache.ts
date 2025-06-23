@@ -3,19 +3,9 @@ import { IQueryOptions, IQueryResponse } from '../../domain/interfaces/queryServ
 
 export default class MessageCache {
   private cache: NodeCache;
-  private messageCache: NodeCache;
 
   constructor() {
     this.cache = new NodeCache({ stdTTL: 3600, maxKeys: 1000 });
-    this.messageCache = new NodeCache({ stdTTL: 300, maxKeys: 10000 });
-  }
-
-  public isDuplicateMessage(messageId: string): boolean {
-    return !!this.messageCache.get(messageId);
-  }
-
-  public markMessageAsProcessed(messageId: string): void {
-    this.messageCache.set(messageId, true);
   }
 
   public getQueryResult(query: string, options: IQueryOptions): IQueryResponse | undefined {

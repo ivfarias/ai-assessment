@@ -33,16 +33,19 @@ export default class OpenAIService {
    * @param params.messages - The messages to generate completion for
    * @param params.model - The model to use (default: 'gpt-4')
    * @param params.temperature - The temperature setting (default: 0.3)
+   * @param params.tools - The tools to use (optional)
    * @returns Promise containing the chat completion
    */
   public async createChatCompletion({
     messages,
-    model = 'gpt-4',
+    model = 'gpt-4o-mini',
     temperature = 0.3,
+    tools,
   }: {
     messages: ChatCompletionMessageParam[];
     model?: string;
     temperature?: number;
+    tools?: OpenAI.Chat.Completions.ChatCompletionTool[];
   }): Promise<OpenAI.Chat.Completions.ChatCompletion> {
     return retry(() =>
       this.openai.chat.completions.create({
@@ -50,6 +53,8 @@ export default class OpenAIService {
         messages,
         temperature,
         max_tokens: 500,
+        tools,
+        tool_choice: tools ? "auto" : undefined,
       }),
     );
   }

@@ -32,6 +32,9 @@ const mongoPlugin: FastifyPluginAsync = fp(
       if (isConnected.ok) {
         db = fastify.mongo.db;
         fastify.log.info(`Connected successfully to MongoDB database: ${dbName}`);
+
+        // Ensure indexes
+        await db.collection('user_profiles').createIndex({ 'progress.currentAssessment': 1 });
       }
     } catch (err) {
       fastify.log.error('Failed to connect to MongoDB:', err);

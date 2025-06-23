@@ -3,6 +3,10 @@ import LanguageService from './language.service.js';
 import { IMessageResponse, IWhatsAppMessage } from '../domain/interfaces/assistant.js';
 import QueryService from './query.service.js';
 import MessageCache from '../infrastructure/cache/MessageCache.js';
+import { getDb } from '../config/mongodb.js';
+import { processAssessment } from './assessmentOrchestrator.js';
+import { UserProfile } from '../types/profile.js';
+import { ObjectId } from 'mongodb';
 
 interface IMessagePayload {
   messaging_product: 'whatsapp';
@@ -98,11 +102,36 @@ export default class WhatsAppService {
   public async handleMessage(message: IWhatsAppMessage): Promise<IMessageResponse> {
     const userMessage = message.text.body;
     const userId = message.from;
+    const db = getDb();
+
+    // Reactivate user if they were inactive
+    const userProfile = await db.collection<UserProfile>("user_profiles").findOne({ _id: userId });
+    if (userProfile?.status === 'inactive') {
+      await db.collection<UserProfile>("user_profiles").updateOne(
+        { _id: userId },
+        { $set: { status: 'active', updatedAt: new Date() } }
+      );
+      // Refetch profile to ensure subsequent logic uses the updated version
+      Object.assign(userProfile, { status: 'active' });
+    } else if (userProfile) {
+      // Also update timestamp for active users on new message
+      await db.collection<UserProfile>("user_profiles").updateOne(
+        { _id: userId },
+        { $set: { updatedAt: new Date() } }
+      );
+    }
+
+    // ALWAYS process the message through the AI. The AI will decide if it's an assessment answer or a general query.
+    // The context of an active assessment is passed to the queryService.
     const userLanguage = await this.languageService.detectLanguage(userMessage);
     const lastConversation = this.messageCache.getLastConversation(userId);
 
     const response = await this.queryService.queryEmbeddings(userMessage, {
-      context: lastConversation,
+      context: {
+        ...lastConversation,
+        scoring: userProfile?.scoring,
+        progress: userProfile?.progress, // Pass assessment progress to the AI
+      },
       userId,
       messageId: message.id,
     });

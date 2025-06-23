@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import indexRouter from './routes/index.js';
 import { logger } from './middleware/logger.js';
 import db from './config/mongodb.js';
+import { CronService } from './services/cron.service.js';
 
 dotenv.config();
 
@@ -25,6 +26,10 @@ const setupServer = async () => {
   try {
     // Database
     await app.register(db);
+
+    // Start cron jobs
+    const cronService = new CronService();
+    cronService.start();
 
     // Swagger docs
     await app.register(fastifySwagger, {

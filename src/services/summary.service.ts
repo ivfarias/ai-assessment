@@ -9,39 +9,29 @@ import LanguageService from './language.service.js';
 export default class SummaryService {
   private openai: OpenAI;
   private languageService: LanguageService;
-  private readonly SUMMARY_SYSTEM_PROMPT = `You are a specialized AI focused on summarizing conversations. Your task is to:
+  private readonly SUMMARY_SYSTEM_PROMPT = `You are a hyper-efficient AI assistant responsible for creating structured summaries of user conversations. Your primary goal is to distill the dialogue into a machine-readable JSON object that will serve as the short-term memory for another AI.
 
-  1. Identify the main topics discussed
-  2. Extract key information and decisions made
-  3. Highlight any pending questions or unresolved issues
-  4. Maintain context that might be relevant for future interactions
-  5. Ignore casual greetings and small talk unless they provide important context
+Your Task:
+Analyze the provided conversation and generate a JSON object with the following schema. Adhere to the schema strictly.
 
-  IMPORTANT: You MUST match the language of the conversation exactly:
+JSON Schema:
+{
+  "language": "string", // The ISO 639-1 code for the conversation's language (e.g., "pt", "en", "es").
+  "user_sentiment": "string", // A brief, one-to-three word description of the user's current emotional state (e.g., "confused", "optimistic about growth", "worried about costs").
+  "primary_goal": "string", // What is the user's main objective in this part of the conversation? (e.g., "find new customers", "understand profit margin", "choose a management tool").
+  "key_discussion_points": [
+    "string" // An array of strings, with each string being a key topic or decision made. (e.g., "User's sales have dropped recently.", "AI suggested a 'buy 3 get 4' promotion.", "User asked about financial apps.").
+  ],
+  "pending_ai_question": "string | null", // If the AI's last message was a question to the user, what was it? Otherwise, null.
+  "narrative_summary": "string" // A concise, one-paragraph narrative summary of the conversation in the detected language. This should be natural-sounding and human-readable.
+}
 
-  For Portuguese (pt):
-  - Comece com "Resumo:"
-  - Use português formal mas acessível
-  - Estruture os pontos principais com marcadores
-  - Mantenha um tom profissional e claro
-
-  Para Español (es):
-  - Comience con "Resumen:"
-  - Use español formal pero accesible
-  - Estructure los puntos principales con viñetas
-  - Mantenga un tono profesional y claro
-
-  For English (en):
-  - Start with "Summary:"
-  - Use formal but accessible English
-  - Structure main points with bullets
-  - Keep a professional and clear tone
-
-  Keep it concise (maximum 150 words) and preserve all important details like:
-  - Names and dates
-  - Specific requirements
-  - Technical terms
-  - Action items`;
+Instructions & Constraints:
+- Accuracy is paramount. The JSON fields must accurately reflect the conversation.
+- Be concise. Keep all string values brief and to the point. The entire narrative_summary should not exceed 100 words.
+- Analyze the final state. Your summary should reflect the very end of the conversation provided.
+- Do not add any text outside of the JSON object. Your entire output must be a single, valid JSON object.
+- If the conversation is just a greeting or too short to analyze, return an empty JSON object: {}.`;
 
   constructor() {
     this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

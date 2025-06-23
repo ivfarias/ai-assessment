@@ -3,11 +3,12 @@ import OpenAIService from './openai.service.js';
 import MessageCache from '../infrastructure/cache/MessageCache.js';
 import ConversationManager from '../infrastructure/memory/ConversationMemoryManager.js';
 import VectorRepository from '../repositories/vector.repository.js';
-import AnalyzeUserIntentService from './analyzeUserIntent.service.js';
 import SummaryService from './summary.service.js';
 import CompletionService from './completion.service.js';
 import { getDb } from '../config/mongodb.js';
-import { IintentMessage } from '../domain/interfaces/assistant.js';
+import { startAssessmentByName } from './assessmentOrchestrator.js';
+import { processAssessment } from './assessmentOrchestrator.js';
+import { HumanMessage, AIMessage, ToolMessage } from '@langchain/core/messages';
 
 /**
  * Service for processing and handling user queries
@@ -18,7 +19,6 @@ export default class QueryService {
   private messageCache: MessageCache;
   private vectorRepository: VectorRepository;
   private conversationManager: ConversationManager;
-  private analyzeUserIntent: AnalyzeUserIntentService;
   private summaryService: SummaryService;
 
   constructor() {
@@ -26,7 +26,6 @@ export default class QueryService {
     this.messageCache = new MessageCache();
     this.vectorRepository = new VectorRepository();
     this.conversationManager = new ConversationManager(getDb().collection('ChatHistory'));
-    this.analyzeUserIntent = new AnalyzeUserIntentService();
     this.summaryService = new SummaryService();
     this.completionService = new CompletionService(this.openAIService);
   }
@@ -46,60 +45,20 @@ export default class QueryService {
       return cachedResult;
     }
 
-    const intent = await this.analyzeUserIntent.getQueryIntent(query);
-    const result = await this.processQuery(query, intent, options);
+    const result = await this.processComplexQuery(query, options);
 
     this.cacheResults(query, options, result);
     return result;
   }
 
   /**
-   * Processes a query based on intent analysis
-   * @param query - The user's query
-   * @param intent - The analyzed intent
-   * @param options - Query processing options
-   * @returns Promise containing the processed query response
-   */
-  private async processQuery(
-    query: string,
-    intent: any,
-    options: IQueryOptions,
-  ): Promise<IQueryResponse> {
-    if (this.isSimpleGreeting(intent)) {
-      return this.prcessSimpleQuery(query);
-    }
-    return this.processComplexQuery(query, intent, options);
-  }
-
-  /**
-   * Checks if the intent is a simple greeting
-   * @param intent - The analyzed intent
-   * @returns boolean indicating if the intent is a simple greeting
-   */
-  private isSimpleGreeting(intent: IintentMessage): boolean {
-    return intent.isGreeting && !intent.hasQuestion && !intent.needsSupport;
-  }
-
-  /**
-   * Handles a simple greeting query
-   * @param query - The user's query
-   * @returns Promise containing the query response
-   */
-  private async prcessSimpleQuery(query: string): Promise<IQueryResponse> {
-    const answer = await this.completionService.generateGreetingResponse(query);
-    return { matches: [], answer };
-  }
-
-  /**
    * Handles a complex query based on intent and context
    * @param query - The user's query
-   * @param intent - The analyzed intent
    * @param options - Query processing options
    * @returns Promise containing the query response
    */
   private async processComplexQuery(
     query: string,
-    intent: IintentMessage,
     options: IQueryOptions,
   ): Promise<IQueryResponse> {
     const docsCollection = getDb().collection('KyteDocs');
@@ -128,14 +87,68 @@ export default class QueryService {
 
     const historySummary = await this.summaryService.summarizeChatHistory(chatHistory);
 
-    const answer = await this.completionService.generateContextualResponse({
+    const firstResponse = await this.completionService.generateContextualResponse({
       query,
-      intent,
+      context: options.context,
       vectorResults: topResults,
       historySummary,
+      messages: chatHistory.chat_history || [],
     });
 
-    await memory.saveContext({ input: query }, { output: answer });
+    if (firstResponse.tool_calls) {
+      const toolCall = firstResponse.tool_calls[0];
+      const functionName = toolCall.function.name;
+      const args = JSON.parse(toolCall.function.arguments);
+
+      let toolResult;
+      if (functionName === 'start_assessment') {
+        toolResult = await processAssessment(options.userId, getDb(), args.assessmentName);
+      } else if (functionName === 'process_assessment_answer') {
+        toolResult = await processAssessment(options.userId, getDb(), undefined, args.answer);
+      }
+
+      const secondResponse = await this.completionService.generateContextualResponse({
+        query: '',
+        context: options.context,
+        vectorResults: topResults,
+        historySummary,
+        messages: [
+          ...chatHistory.chat_history || [],
+          firstResponse,
+          {
+            tool_call_id: toolCall.id,
+            role: "tool",
+            name: functionName,
+            content: JSON.stringify(toolResult),
+          }
+        ]
+      });
+
+      await memory.chatHistory.addMessages([
+        new HumanMessage(query),
+        new AIMessage({
+          content: firstResponse.content || '',
+          tool_calls: firstResponse.tool_calls?.map(tc => ({
+            name: tc.function.name,
+            args: JSON.parse(tc.function.arguments),
+            id: tc.id,
+          })) || [],
+        }),
+        new ToolMessage({
+          content: JSON.stringify(toolResult),
+          tool_call_id: toolCall.id,
+        }),
+        new AIMessage(secondResponse.content || ''),
+      ]);
+
+      return { matches: [], answer: secondResponse.content || "An error occurred." };
+    }
+
+    const answer = firstResponse.content || "I'm not sure how to respond to that.";
+    await memory.chatHistory.addMessages([
+      new HumanMessage(query),
+      new AIMessage(answer),
+    ]);
 
     return {
       matches: topResults,
@@ -150,9 +163,6 @@ export default class QueryService {
    * @param result - The query response
    */
   private cacheResults(query: string, options: IQueryOptions, result: IQueryResponse): void {
-    if (options.messageId) {
-      this.messageCache.markMessageAsProcessed(options.messageId);
-    }
     this.messageCache.setQueryResult(query, options, result);
   }
 }

@@ -12,10 +12,3 @@ export interface IMessageResponse {
   apiResults?: any[];
   language: string;
 }
-
-export interface IintentMessage {
-  isGreeting: boolean;
-  hasQuestion: boolean;
-  needsSupport: boolean;
-  topic: string;
-}
