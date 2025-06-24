@@ -134,15 +134,15 @@ export default class WhatsAppService {
       }
     });
 
-    if (response) {
-      this.messageCache.setLastConversation(userId, {
-        query: userMessage,
-        response: response.answer,
-      });
-    }
+    const finalAnswer = response?.answer || '[Resposta não encontrada]';
+
+    this.messageCache.setLastConversation(userId, {
+      query: userMessage,
+      response: finalAnswer,
+    });
 
     return {
-      ...response,
+      answer: finalAnswer,
       language: userLanguage,
     };
   }

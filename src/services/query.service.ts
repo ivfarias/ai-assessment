@@ -6,9 +6,7 @@ import VectorRepository from '../repositories/vector.repository.js';
 import SummaryService from './summary.service.js';
 import CompletionService from './completion.service.js';
 import { getDb } from '../config/mongodb.js';
-import { startAssessmentByName } from './assessmentOrchestrator.js';
-import { processAssessment } from './assessmentOrchestrator.js';
-import { HumanMessage, AIMessage, ToolMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage } from '@langchain/core/messages';
 
 /**
  * Service for processing and handling user queries
@@ -98,55 +96,6 @@ export default class QueryService {
       historySummary,
       messages: chatHistory.chat_history || [],
     });
-
-    if (firstResponse.tool_calls) {
-      const toolCall = firstResponse.tool_calls[0];
-      const functionName = toolCall.function.name;
-      const args = JSON.parse(toolCall.function.arguments);
-
-      let toolResult;
-      if (functionName === 'start_assessment') {
-        toolResult = await startAssessmentByName(args.user_id, args.assessment_name, getDb());
-      } else if (functionName === 'process_assessment_answer') {
-        toolResult = await processAssessment(args.user_id, getDb(), undefined, args.input);
-      }
-
-      const secondResponse = await this.completionService.generateContextualResponse({
-        query: '',
-        context: options.context,
-        vectorResults: topResults,
-        historySummary,
-        messages: [
-          ...chatHistory.chat_history || [],
-          firstResponse,
-          {
-            tool_call_id: toolCall.id,
-            role: "tool",
-            name: functionName,
-            content: JSON.stringify(toolResult),
-          }
-        ]
-      });
-
-      await memory.chatHistory.addMessages([
-        new HumanMessage(query),
-        new AIMessage({
-          content: firstResponse.content || '',
-          tool_calls: firstResponse.tool_calls?.map(tc => ({
-            name: tc.function.name,
-            args: JSON.parse(tc.function.arguments),
-            id: tc.id,
-          })) || [],
-        }),
-        new ToolMessage({
-          content: JSON.stringify(toolResult),
-          tool_call_id: toolCall.id,
-        }),
-        new AIMessage(secondResponse.content || ''),
-      ]);
-
-      return { matches: [], answer: secondResponse.content || "An error occurred." };
-    }
 
     const answer = firstResponse.content || "I'm not sure how to respond to that.";
     await memory.chatHistory.addMessages([

@@ -67,7 +67,30 @@ export default class CompletionService {
       tools,
     });
 
-    return response.choices[0].message;
+    const choice = response.choices[0];
+
+    if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls?.length) {
+      const toolCall = choice.message.tool_calls[0];
+      const { name, arguments: args } = toolCall.function;
+
+      const parsedArgs = JSON.parse(args);
+
+      if (name === 'start_assessment') {
+        const { startAssessmentByName } = await import('./assessmentOrchestrator.js');
+        const result = await startAssessmentByName(parsedArgs.user_id, parsedArgs.assessment_name, undefined);
+        return { role: 'assistant', content: result.prompt ?? '[Avaliação iniciada]', refusal: "false" };
+      }
+
+      if (name === 'process_assessment_answer') {
+        const { processAssessment } = await import('./assessmentOrchestrator.js');
+        const result = await processAssessment(parsedArgs.user_id, undefined, undefined, parsedArgs.input);
+        return { role: 'assistant', content: result.current_step_goal ?? '[Resposta registrada]', refusal: "false" };
+      }
+
+      return { role: 'assistant', content: '[Função reconhecida, mas sem ação definida]', refusal: "false" };
+    }
+
+    return choice.message;
   }
 
   /**

@@ -11,7 +11,18 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         properties: {
           assessment_name: {
             type: "string",
-            description: "The internal key of the assessment (e.g., 'financialHealthRadar')",
+            description: "The internal key of the assessment. Choose the one that matches the user intent. For example, use 'simulateProfit' if the user asks to simulate profit, or 'financialHealthRadar' for questions about financial health.",
+            // Enum mappings:
+            // "Simular Lucro" → "simulateProfit"
+            // "Radar de Saúde Financeira" → "financialHealthRadar"
+            // "Teste de Independência Operacional" → "operationalIndependenceTest"
+            // "Scanner de Ferramentas" → "toolScanner"
+            // "Termômetro de Padronização" → "standardizationThermometer"
+            // "Painel de Fidelização de Clientes" → "customerLoyaltyPanel"
+            // "Mapa de Aquisição de Clientes" → "customerAcquisitionMap"
+            // "Scanner de Estratégia de Mercado" → "marketStrategyScanner"
+            // "Raio-X Organizacional" → "organizationalXray"
+            // "Diagnóstico de Contexto" → "contextDiagnosis"
             enum: [
               "simulateProfit",
               "financialHealthRadar",

@@ -54,7 +54,7 @@ export default class OpenAIService {
         temperature,
         max_tokens: 500,
         tools,
-        tool_choice: tools ? "auto" : undefined,
+        tool_choice: tools ? "required" : undefined,
       }),
     );
   }
