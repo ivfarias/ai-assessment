@@ -51,6 +51,10 @@ export default class QueryService {
     return result;
   }
 
+  public async query(query: string, options: IQueryOptions): Promise<IQueryResponse> {
+    return this.processComplexQuery(query, options);
+  }
+
   /**
    * Handles a complex query based on intent and context
    * @param query - The user's query
@@ -102,9 +106,9 @@ export default class QueryService {
 
       let toolResult;
       if (functionName === 'start_assessment') {
-        toolResult = await processAssessment(options.userId, getDb(), args.assessmentName);
+        toolResult = await startAssessmentByName(args.user_id, args.assessment_name, getDb());
       } else if (functionName === 'process_assessment_answer') {
-        toolResult = await processAssessment(options.userId, getDb(), undefined, args.answer);
+        toolResult = await processAssessment(args.user_id, getDb(), undefined, args.input);
       }
 
       const secondResponse = await this.completionService.generateContextualResponse({

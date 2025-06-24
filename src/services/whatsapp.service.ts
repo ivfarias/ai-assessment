@@ -2,11 +2,9 @@ import axios from 'axios';
 import LanguageService from './language.service.js';
 import { IMessageResponse, IWhatsAppMessage } from '../domain/interfaces/assistant.js';
 import QueryService from './query.service.js';
+import { UserProfile } from '../types/profile.js';
 import MessageCache from '../infrastructure/cache/MessageCache.js';
 import { getDb } from '../config/mongodb.js';
-import { processAssessment } from './assessmentOrchestrator.js';
-import { UserProfile } from '../types/profile.js';
-import { ObjectId } from 'mongodb';
 
 interface IMessagePayload {
   messaging_product: 'whatsapp';
@@ -126,14 +124,14 @@ export default class WhatsAppService {
     const userLanguage = await this.languageService.detectLanguage(userMessage);
     const lastConversation = this.messageCache.getLastConversation(userId);
 
-    const response = await this.queryService.queryEmbeddings(userMessage, {
+    const response = await this.queryService.query(userMessage, {
+      userId,
+      messageId: message.id,
       context: {
         ...lastConversation,
         scoring: userProfile?.scoring,
-        progress: userProfile?.progress, // Pass assessment progress to the AI
-      },
-      userId,
-      messageId: message.id,
+        progress: userProfile?.progress
+      }
     });
 
     if (response) {

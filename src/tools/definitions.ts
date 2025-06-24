@@ -5,13 +5,13 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "start_assessment",
-      description: "Starts a specific diagnostic assessment when the user shows clear intent to begin an analysis of a part of their business. This should be used when the user agrees to start a specific assessment that was suggested to them, or asks a question that directly maps to one.",
+      description: "Starts a new business assessment for a user.",
       parameters: {
         type: "object",
         properties: {
-          assessmentName: {
+          assessment_name: {
             type: "string",
-            description: "The name of the assessment to start.",
+            description: "The internal key of the assessment (e.g., 'financialHealthRadar')",
             enum: [
               "simulateProfit",
               "financialHealthRadar",
@@ -22,12 +22,16 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
               "customerAcquisitionMap",
               "marketStrategyScanner",
               "organizationalXray",
-              "contextDiagnosis",
-            ],
+              "contextDiagnosis"
+            ]
           },
+          user_id: {
+            type: "string",
+            description: "The WhatsApp user ID"
+          }
         },
-        required: ["assessmentName"],
-      },
+        required: ["assessment_name", "user_id"]
+      }
     },
   },
   {
@@ -38,13 +42,17 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          answer: {
+          user_id: {
             type: "string",
-            description: "The user's answer, extracted from their message.",
+            description: "The WhatsApp user ID"
           },
+          input: {
+            type: "string",
+            description: "The user's answer, extracted from their message."
+          }
         },
-        required: ["answer"],
+        required: ["user_id", "input"]
       },
     },
   }
-]; 
+];

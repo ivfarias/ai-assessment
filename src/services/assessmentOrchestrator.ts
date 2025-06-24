@@ -152,6 +152,7 @@ export async function processAssessment(userId: string, db: Db, assessmentName?:
   if (input !== undefined && currentStepIndex > 0) {
     const previousStep = assessment.steps[currentStepIndex - 1];
     answers[previousStep.key] = input;
+    currentStepIndex++;
   }
   
   // Update progress in DB before deciding next action
@@ -162,7 +163,11 @@ export async function processAssessment(userId: string, db: Db, assessmentName?:
 
   // Case 3: More steps remaining, return the goal for the next question
   if (currentStepIndex < assessment.steps.length) {
-    return { current_step_goal: assessment.steps[currentStepIndex] };
+    return {
+      current_step_goal: assessment.steps[currentStepIndex],
+      stepIndex: currentStepIndex,
+      totalSteps: assessment.steps.length
+    };
   }
 
   // Case 4: Assessment is complete
@@ -216,4 +221,4 @@ export async function startAssessmentByName(userId: string, assessmentName: stri
 
   // Fallback prompt if the module doesn't have a specific first prompt
   return { prompt: `Ok, vamos começar a análise de ${assessmentName}. Por favor, forneça as informações necessárias.` };
-} 
+}
