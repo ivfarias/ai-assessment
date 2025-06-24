@@ -97,15 +97,37 @@ export default class QueryService {
       messages: chatHistory.chat_history || [],
     });
 
-    const answer = firstResponse.content || "I'm not sure how to respond to that.";
+    let finalAnswer = firstResponse.content || "I'm not sure how to respond to that.";
+
+    if (firstResponse.tool_calls?.length) {
+      const toolCall = firstResponse.tool_calls[0];
+      const followup = await this.completionService.generateContextualResponse({
+        query,
+        context: options.context,
+        vectorResults: topResults,
+        historySummary,
+        messages: [
+          ...chatHistory.chat_history || [],
+          firstResponse,
+          {
+            role: "tool",
+            tool_call_id: toolCall.id,
+            name: toolCall.function.name,
+            content: "placeholder",
+          }
+        ]
+      });
+      finalAnswer = followup.content || finalAnswer;
+    }
+
     await memory.chatHistory.addMessages([
       new HumanMessage(query),
-      new AIMessage(answer),
+      new AIMessage(finalAnswer),
     ]);
 
     return {
       matches: topResults,
-      answer,
+      answer: finalAnswer,
     };
   }
 

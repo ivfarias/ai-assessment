@@ -9,29 +9,17 @@ import LanguageService from './language.service.js';
 export default class SummaryService {
   private openai: OpenAI;
   private languageService: LanguageService;
-  private readonly SUMMARY_SYSTEM_PROMPT = `You are a hyper-efficient AI assistant responsible for creating structured summaries of user conversations. Your primary goal is to distill the dialogue into a machine-readable JSON object that will serve as the short-term memory for another AI.
+  private readonly SUMMARY_SYSTEM_PROMPT = `You are a summarization assistant. Only use the conversation history provided to you. Do not reference or assume access to external knowledge or documents. Do not respond with explanations. Output only a valid JSON object that adheres to the schema below.
 
-Your Task:
-Analyze the provided conversation and generate a JSON object with the following schema. Adhere to the schema strictly.
-
-JSON Schema:
+Schema:
 {
-  "language": "string", // The ISO 639-1 code for the conversation's language (e.g., "pt", "en", "es").
-  "user_sentiment": "string", // A brief, one-to-three word description of the user's current emotional state (e.g., "confused", "optimistic about growth", "worried about costs").
-  "primary_goal": "string", // What is the user's main objective in this part of the conversation? (e.g., "find new customers", "understand profit margin", "choose a management tool").
-  "key_discussion_points": [
-    "string" // An array of strings, with each string being a key topic or decision made. (e.g., "User's sales have dropped recently.", "AI suggested a 'buy 3 get 4' promotion.", "User asked about financial apps.").
-  ],
-  "pending_ai_question": "string | null", // If the AI's last message was a question to the user, what was it? Otherwise, null.
-  "narrative_summary": "string" // A concise, one-paragraph narrative summary of the conversation in the detected language. This should be natural-sounding and human-readable.
-}
-
-Instructions & Constraints:
-- Accuracy is paramount. The JSON fields must accurately reflect the conversation.
-- Be concise. Keep all string values brief and to the point. The entire narrative_summary should not exceed 100 words.
-- Analyze the final state. Your summary should reflect the very end of the conversation provided.
-- Do not add any text outside of the JSON object. Your entire output must be a single, valid JSON object.
-- If the conversation is just a greeting or too short to analyze, return an empty JSON object: {}.`;
+  "language": "string",
+  "user_sentiment": "string",
+  "primary_goal": "string",
+  "key_discussion_points": [ "string" ],
+  "pending_ai_question": "string | null",
+  "narrative_summary": "string"
+}`;
 
   constructor() {
     this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
