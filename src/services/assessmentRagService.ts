@@ -34,8 +34,8 @@ export class AssessmentRagService {
   private embeddings: OpenAIEmbeddings;
   private textSplitter: RecursiveCharacterTextSplitter;
   private db: Db;
-  private embeddingService: AssessmentEmbeddingService;
-  private assessmentService: AssessmentService;
+  public embeddingService: AssessmentEmbeddingService;
+  public assessmentService: AssessmentService;
 
   constructor(db: Db) {
     this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

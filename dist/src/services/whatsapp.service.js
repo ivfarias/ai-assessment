@@ -99,21 +99,7 @@ export default class WhatsAppService {
             // Also update timestamp for active users on new message
             await db.collection("user_profiles").updateOne({ _id: userId }, { $set: { updatedAt: new Date() } });
         }
-        // First, check if this is an assessment-related request using RAG
-        const assessmentResult = await this.assessmentRagService.processMessage(userId, userMessage);
-        if (assessmentResult.isAssessmentRequest) {
-            // Handle assessment request directly
-            const userLanguage = await this.languageService.detectLanguage(userMessage);
-            this.messageCache.setLastConversation(userId, {
-                query: userMessage,
-                response: assessmentResult.response || 'Processando análise...',
-            });
-            return {
-                answer: assessmentResult.response || 'Processando análise...',
-                language: userLanguage,
-            };
-        }
-        // If not an assessment request, process through the regular query service
+        // Always let the AI handle the user's message first
         const userLanguage = await this.languageService.detectLanguage(userMessage);
         const lastConversation = this.messageCache.getLastConversation(userId);
         const response = await this.queryService.query(userMessage, {

@@ -16,29 +16,9 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           user_query: {
             type: "string",
             description: "The user's original query or concern"
-          },
-          suggested_assessment: {
-            type: "string",
-            description: "The assessment that would be most helpful for the user's situation",
-            enum: [
-              "simulateProfit",
-              "financialHealthRadar", 
-              "operationalIndependenceTest",
-              "toolScanner",
-              "standardizationThermometer",
-              "customerLoyaltyPanel",
-              "customerAcquisitionMap",
-              "marketStrategyScanner",
-              "organizationalXray",
-              "contextDiagnosis"
-            ]
-          },
-          reasoning: {
-            type: "string",
-            description: "Brief explanation of why this assessment would be helpful"
           }
         },
-        required: ["user_id", "user_query", "suggested_assessment", "reasoning"]
+        required: ["user_id", "user_query"]
       }
     },
   },

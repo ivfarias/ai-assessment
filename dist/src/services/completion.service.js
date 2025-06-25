@@ -60,77 +60,89 @@ export default class CompletionService {
                 return { role: 'assistant', content: suggestion, tool_calls: choice.message.tool_calls, refusal: "false" };
             }
             if (name === 'start_assessment') {
-                const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
-                const response = await fetch(`${baseUrl}/assessments/${parsedArgs.assessment_name}/start`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        userId: parsedArgs.user_id,
-                        context: {}
-                    })
-                });
-                if (!response.ok) {
-                    return { role: 'assistant', content: 'Desculpe, houve um erro ao iniciar a análise. Tente novamente.', tool_calls: choice.message.tool_calls, refusal: "false" };
-                }
-                const result = await response.json();
-                return { role: 'assistant', content: result.currentStep?.prompt || '[Avaliação iniciada]', tool_calls: choice.message.tool_calls, refusal: "false" };
+                const result = await this.handleStartAssessment(parsedArgs);
+                return { role: 'assistant', content: result, tool_calls: choice.message.tool_calls, refusal: "false" };
             }
             if (name === 'process_assessment_answer') {
-                // Get the current assessment from user profile
-                const user = await getDb().collection("user_profiles").findOne({ _id: parsedArgs.user_id });
-                const currentAssessment = user?.progress?.currentAssessment;
-                if (!currentAssessment) {
-                    return { role: 'assistant', content: 'Não há uma análise ativa no momento.', tool_calls: choice.message.tool_calls, refusal: "false" };
-                }
-                const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
-                const response = await fetch(`${baseUrl}/assessments/${currentAssessment}/answer`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        userId: parsedArgs.user_id,
-                        answer: parsedArgs.input
-                    })
-                });
-                if (!response.ok) {
-                    return { role: 'assistant', content: 'Desculpe, houve um erro ao processar sua resposta. Tente novamente.', tool_calls: choice.message.tool_calls, refusal: "false" };
-                }
-                const result = await response.json();
-                if (result.status === 'completed') {
-                    let message = `✅ Análise de ${result.assessmentName} concluída!\n\n`;
-                    if (result.insights && result.insights.length > 0) {
-                        message += "💡 Principais insights:\n";
-                        result.insights.forEach((insight, index) => {
-                            message += `${index + 1}. ${insight}\n`;
-                        });
-                    }
-                    return { role: 'assistant', content: message, tool_calls: choice.message.tool_calls, refusal: "false" };
-                }
-                return { role: 'assistant', content: result.nextStep?.prompt || '[Resposta registrada]', tool_calls: choice.message.tool_calls, refusal: "false" };
+                const result = await this.handleProcessAssessmentAnswer(parsedArgs);
+                return { role: 'assistant', content: result, tool_calls: choice.message.tool_calls, refusal: "false" };
             }
             return { role: 'assistant', content: '[Função reconhecida, mas sem ação definida]', tool_calls: choice.message.tool_calls, refusal: "false" };
         }
         return choice.message;
     }
     /**
-     * Handle assessment suggestion and provide a helpful response
+     * Handle assessment suggestion using RAG for intelligent suggestions
      */
     async handleAssessmentSuggestion(args) {
-        const { user_id, user_query, suggested_assessment, reasoning } = args;
+        const { user_id, user_query } = args;
+        // Use RAG to get intelligent assessment suggestions
+        const suggestions = await this.assessmentRagService.embeddingService.getAssessmentSuggestions(user_query);
+        if (suggestions.length === 0) {
+            return 'Desculpe, não consegui identificar uma análise adequada para sua situação. Pode me contar mais sobre o que você gostaria de melhorar no seu negócio?';
+        }
+        const bestSuggestion = suggestions[0];
         const assessmentDefinitions = this.assessmentRagService.getAvailableAssessments();
-        const assessment = assessmentDefinitions.find(a => a.name === suggested_assessment);
+        const assessment = assessmentDefinitions.find(a => a.name === bestSuggestion.suggestedAssessment);
         if (!assessment) {
             return 'Desculpe, não consegui identificar uma análise adequada para sua situação.';
         }
-        let message = `💡 Baseado na sua pergunta sobre "${user_query}", sugiro a análise: **${suggested_assessment}**\n\n`;
+        let message = `💡 Baseado na sua pergunta sobre "${user_query}", sugiro a análise: **${assessment.name}**\n\n`;
         message += `📋 **O que esta análise faz:**\n${assessment.description}\n\n`;
-        message += `🤔 **Por que seria útil:** ${reasoning}\n\n`;
+        message += `🤔 **Por que seria útil:** ${bestSuggestion.reasoning}\n\n`;
         message += `✅ **Gostaria de começar esta análise agora?**\n`;
         message += `Responda "sim" para iniciar ou me diga se prefere outra abordagem.`;
         return message;
+    }
+    /**
+     * Handle starting an assessment using the AssessmentService directly
+     */
+    async handleStartAssessment(args) {
+        const { assessment_name, user_id } = args;
+        try {
+            const result = await this.assessmentRagService.assessmentService.startAssessment(assessment_name, user_id);
+            if (result.currentStep) {
+                return result.currentStep.goal_prompt;
+            }
+            return `Vamos começar a análise de ${assessment_name}. Por favor, forneça as informações necessárias.`;
+        }
+        catch (error) {
+            console.error('Error starting assessment:', error);
+            return 'Desculpe, houve um erro ao iniciar a análise. Tente novamente.';
+        }
+    }
+    /**
+     * Handle processing assessment answers using the AssessmentService directly
+     */
+    async handleProcessAssessmentAnswer(args) {
+        const { user_id, input } = args;
+        try {
+            // Get the current assessment from user profile
+            const user = await getDb().collection("user_profiles").findOne({ _id: user_id });
+            const currentAssessment = user?.progress?.currentAssessment;
+            if (!currentAssessment) {
+                return 'Não há uma análise ativa no momento.';
+            }
+            const result = await this.assessmentRagService.assessmentService.processAnswer(currentAssessment, user_id, input);
+            if (result.status === 'completed') {
+                let message = `✅ Análise de ${currentAssessment} concluída!\n\n`;
+                if (result.insights && result.insights.length > 0) {
+                    message += "💡 Principais insights:\n";
+                    result.insights.forEach((insight, index) => {
+                        message += `${index + 1}. ${insight}\n`;
+                    });
+                }
+                return message;
+            }
+            if (result.nextStep) {
+                return result.nextStep.goal_prompt;
+            }
+            return 'Por favor, continue respondendo as perguntas da análise.';
+        }
+        catch (error) {
+            console.error('Error processing assessment answer:', error);
+            return 'Desculpe, houve um erro ao processar sua resposta. Tente novamente.';
+        }
     }
     /**
      * Formats vector results into a readable string
