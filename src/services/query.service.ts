@@ -89,8 +89,8 @@ export default class QueryService {
 
     const historySummary = await this.summaryService.summarizeChatHistory(chatHistory);
 
-    // Clean the chat history to remove any orphaned tool messages
-    const cleanHistory = this.cleanChatHistory(chatHistory.chat_history || []);
+    // Completely remove all tool messages from history for the initial call
+    const cleanHistory = this.removeAllToolMessages(chatHistory.chat_history || []);
 
     const firstResponse = await this.completionService.generateContextualResponse({
       query,
@@ -139,33 +139,29 @@ export default class QueryService {
   }
 
   /**
-   * Cleans chat history to remove orphaned tool messages
+   * Completely removes all tool messages from the conversation history
    * @param messages - Array of chat history messages
-   * @returns Cleaned array of messages
+   * @returns Array of messages without any tool messages
    */
-  private cleanChatHistory(messages: any[]): any[] {
-    const cleaned: any[] = [];
-    let lastHadToolCalls = false;
-
-    for (const message of messages) {
-      // If this is a tool message, only include it if the previous message had tool_calls
-      if (message.role === 'tool' || (message._getType && message._getType() === 'tool')) {
-        if (lastHadToolCalls) {
-          cleaned.push(message);
-        }
-        lastHadToolCalls = false;
-      } else {
-        // For non-tool messages, check if they have tool_calls
-        if (message.tool_calls && message.tool_calls.length > 0) {
-          lastHadToolCalls = true;
-        } else {
-          lastHadToolCalls = false;
-        }
-        cleaned.push(message);
+  private removeAllToolMessages(messages: any[]): any[] {
+    console.log('🗑️ Removing all tool messages from history, original length:', messages.length);
+    
+    const filtered = messages.filter(message => {
+      const isToolMessage = message.role === 'tool' || 
+                           (message._getType && message._getType() === 'tool') ||
+                           (message.name && message.tool_call_id);
+      
+      if (isToolMessage) {
+        console.log(`❌ Removing tool message:`, message);
+        return false;
       }
-    }
+      
+      console.log(`✅ Keeping message:`, message.role || message._getType?.());
+      return true;
+    });
 
-    return cleaned;
+    console.log('🗑️ After removing tool messages, length:', filtered.length);
+    return filtered;
   }
 
   /**
