@@ -40,9 +40,11 @@ export default class CompletionService {
             ].join('\n');
             userMessages.push({ role: 'user', content });
         }
+        // Convert any LangChain messages to OpenAI format
+        const convertedMessages = this.convertMessagesToOpenAIFormat(messages);
         const allMessages = [
             systemMessage,
-            ...messages,
+            ...convertedMessages,
             ...userMessages,
         ];
         console.log('Messages sent to OpenAI:', JSON.stringify(allMessages, null, 2));
@@ -70,6 +72,47 @@ export default class CompletionService {
             return { role: 'assistant', content: '[Função reconhecida, mas sem ação definida]', tool_calls: choice.message.tool_calls, refusal: "false" };
         }
         return choice.message;
+    }
+    /**
+     * Converts LangChain messages to OpenAI format
+     * @param messages - Array of messages that might be LangChain or OpenAI format
+     * @returns Array of messages in OpenAI format
+     */
+    convertMessagesToOpenAIFormat(messages) {
+        return messages.map(message => {
+            // If it's already in OpenAI format, return as is
+            if (message.role && (message.content || message.tool_calls)) {
+                return message;
+            }
+            // If it's a LangChain message, convert it
+            if (message._getType) {
+                const type = message._getType();
+                if (type === 'human') {
+                    return { role: 'user', content: message.content };
+                }
+                else if (type === 'ai') {
+                    return { role: 'assistant', content: message.content };
+                }
+                else if (type === 'system') {
+                    return { role: 'system', content: message.content };
+                }
+                else if (type === 'tool') {
+                    return {
+                        role: 'tool',
+                        tool_call_id: message.tool_call_id,
+                        name: message.name,
+                        content: message.content
+                    };
+                }
+            }
+            // If it's an unknown format, try to extract role and content
+            if (message.role) {
+                return message;
+            }
+            // Default fallback - treat as user message
+            console.warn('Unknown message format, treating as user message:', message);
+            return { role: 'user', content: message.content || JSON.stringify(message) };
+        }).filter(message => message && message.role && (message.content || message.tool_calls));
     }
     /**
      * Handle assessment suggestion using RAG for intelligent suggestions
