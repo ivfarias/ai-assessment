@@ -5,6 +5,7 @@ import QueryService from './query.service.js';
 import { UserProfile } from '../types/profile.js';
 import MessageCache from '../infrastructure/cache/MessageCache.js';
 import { getDb } from '../config/mongodb.js';
+import { AssessmentRagService } from './assessmentRagService.js';
 
 interface IMessagePayload {
   messaging_product: 'whatsapp';
@@ -21,12 +22,14 @@ export default class WhatsAppService {
   private queryService: QueryService;
   private languageService: LanguageService;
   private messageCache: MessageCache;
+  private assessmentRagService: AssessmentRagService;
   private baseUrl: string;
 
   constructor() {
     this.queryService = new QueryService();
     this.languageService = new LanguageService();
     this.messageCache = new MessageCache();
+    this.assessmentRagService = new AssessmentRagService(getDb());
     this.baseUrl = `https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}`;
   }
 
@@ -119,8 +122,25 @@ export default class WhatsAppService {
       );
     }
 
-    // ALWAYS process the message through the AI. The AI will decide if it's an assessment answer or a general query.
-    // The context of an active assessment is passed to the queryService.
+    // First, check if this is an assessment-related request using RAG
+    const assessmentResult = await this.assessmentRagService.processMessage(userId, userMessage);
+    
+    if (assessmentResult.isAssessmentRequest) {
+      // Handle assessment request directly
+      const userLanguage = await this.languageService.detectLanguage(userMessage);
+      
+      this.messageCache.setLastConversation(userId, {
+        query: userMessage,
+        response: assessmentResult.response || 'Processando análise...',
+      });
+
+      return {
+        answer: assessmentResult.response || 'Processando análise...',
+        language: userLanguage,
+      };
+    }
+
+    // If not an assessment request, process through the regular query service
     const userLanguage = await this.languageService.detectLanguage(userMessage);
     const lastConversation = this.messageCache.getLastConversation(userId);
 

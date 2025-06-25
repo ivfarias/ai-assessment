@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node ./dist/server.js",
     "build": "npx tsc",
-    "dev": "tsx watch -r dotenv/config ./src/server.ts"
+    "dev": "tsx watch -r dotenv/config ./src/server.ts",
+    "init-assessment-knowledge": "tsx -r dotenv/config ./src/scripts/initializeAssessmentKnowledge.ts",
+    "test-assessment-rag": "tsx -r dotenv/config ./src/scripts/testAssessmentRag.ts",
+    "test-assessment-endpoints": "tsx -r dotenv/config ./src/scripts/testAssessmentEndpoints.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

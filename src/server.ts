@@ -9,6 +9,8 @@ import indexRouter from './routes/index.js';
 import { logger } from './middleware/logger.js';
 import db from './config/mongodb.js';
 import { CronService } from './services/cron.service.js';
+import { AssessmentEmbeddingService } from './services/assessmentEmbeddingService.js';
+import { getDb } from './config/mongodb.js';
 
 dotenv.config();
 
@@ -26,6 +28,17 @@ const setupServer = async () => {
   try {
     // Database
     await app.register(db);
+
+    // Initialize assessment knowledge base
+    try {
+      console.log('🚀 Initializing assessment knowledge base...');
+      const embeddingService = new AssessmentEmbeddingService(getDb());
+      await embeddingService.initializeKnowledgeBase();
+      console.log('✅ Assessment knowledge base initialized successfully!');
+    } catch (error) {
+      console.error('⚠️ Warning: Failed to initialize assessment knowledge base:', error);
+      console.log('📝 Assessment functionality will still work with fallback methods');
+    }
 
     // Start cron jobs
     const cronService = new CronService();
