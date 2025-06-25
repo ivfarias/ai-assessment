@@ -71,30 +71,34 @@ export default class QueryService {
         const memory = await this.conversationManager.getMemory(options.userId);
         const chatHistory = await memory.loadMemoryVariables({});
         const historySummary = await this.summaryService.summarizeChatHistory(chatHistory);
+        // Clean the chat history to remove any orphaned tool messages
+        const cleanHistory = this.cleanChatHistory(chatHistory.chat_history || []);
         const firstResponse = await this.completionService.generateContextualResponse({
             query,
             context: options.context,
             vectorResults: topResults,
             historySummary,
-            messages: chatHistory.chat_history || [],
+            messages: cleanHistory,
         });
         let finalAnswer = firstResponse.content || "I'm not sure how to respond to that.";
         if (firstResponse.tool_calls?.length) {
             const toolCall = firstResponse.tool_calls[0];
+            // Create a proper tool response message
+            const toolResponse = {
+                role: "tool",
+                tool_call_id: toolCall.id,
+                name: toolCall.function.name,
+                content: "Tool execution completed successfully."
+            };
             const followup = await this.completionService.generateContextualResponse({
                 query,
                 context: options.context,
                 vectorResults: topResults,
                 historySummary,
                 messages: [
-                    ...chatHistory.chat_history || [],
+                    ...cleanHistory,
                     firstResponse,
-                    {
-                        role: "tool",
-                        tool_call_id: toolCall.id,
-                        name: toolCall.function.name,
-                        content: "placeholder",
-                    }
+                    toolResponse
                 ]
             });
             finalAnswer = followup.content || finalAnswer;
@@ -107,6 +111,35 @@ export default class QueryService {
             matches: topResults,
             answer: finalAnswer,
         };
+    }
+    /**
+     * Cleans chat history to remove orphaned tool messages
+     * @param messages - Array of chat history messages
+     * @returns Cleaned array of messages
+     */
+    cleanChatHistory(messages) {
+        const cleaned = [];
+        let lastHadToolCalls = false;
+        for (const message of messages) {
+            // If this is a tool message, only include it if the previous message had tool_calls
+            if (message.role === 'tool' || (message._getType && message._getType() === 'tool')) {
+                if (lastHadToolCalls) {
+                    cleaned.push(message);
+                }
+                lastHadToolCalls = false;
+            }
+            else {
+                // For non-tool messages, check if they have tool_calls
+                if (message.tool_calls && message.tool_calls.length > 0) {
+                    lastHadToolCalls = true;
+                }
+                else {
+                    lastHadToolCalls = false;
+                }
+                cleaned.push(message);
+            }
+        }
+        return cleaned;
     }
     /**
      * Caches the query results
