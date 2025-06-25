@@ -4,6 +4,7 @@ import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import OpenAI from 'openai';
 import { UserProfile } from "../types/profile.js";
 import { AssessmentEmbeddingService } from "./assessmentEmbeddingService.js";
+import { AssessmentService } from "./assessment.service.js";
 
 interface AssessmentStep {
   key: string;
@@ -34,7 +35,7 @@ export class AssessmentRagService {
   private textSplitter: RecursiveCharacterTextSplitter;
   private db: Db;
   private embeddingService: AssessmentEmbeddingService;
-  private baseUrl: string;
+  private assessmentService: AssessmentService;
 
   constructor(db: Db) {
     this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -48,7 +49,7 @@ export class AssessmentRagService {
     });
     this.db = db;
     this.embeddingService = new AssessmentEmbeddingService(db);
-    this.baseUrl = process.env.API_BASE_URL || 'https://ai-assessment-fawn.vercel.app';
+    this.assessmentService = new AssessmentService(db);
   }
 
   // Assessment definitions with detailed descriptions
@@ -171,13 +172,18 @@ export class AssessmentRagService {
     input?: string;
     response?: string;
   }> {
+    console.log(`🔍 Processing message: "${userMessage}" for user: ${userId}`);
+    
     // Get user profile to check current assessment status
     const user = await this.db.collection<UserProfile>("user_profiles").findOne({ _id: userId });
     const currentAssessment = user?.progress?.currentAssessment;
     const currentStepIndex = user?.progress?.stepIndex || 0;
 
+    console.log(`📊 User assessment status: current=${currentAssessment}, step=${currentStepIndex}`);
+
     // If user is in the middle of an assessment, process their answer
     if (currentAssessment && currentStepIndex > 0) {
+      console.log(`🔄 User is in assessment: ${currentAssessment}, processing answer`);
       return {
         isAssessmentRequest: true,
         action: 'process_answer',
@@ -189,6 +195,7 @@ export class AssessmentRagService {
     // Check if user is confirming an assessment suggestion
     const lastConversation = user?.progress?.lastAssessmentSuggestion;
     if (lastConversation && this.isConfirmation(userMessage)) {
+      console.log(`✅ User confirmed assessment suggestion: ${lastConversation}`);
       return {
         isAssessmentRequest: true,
         action: 'start_assessment',
@@ -198,8 +205,10 @@ export class AssessmentRagService {
     }
 
     // Check if user wants to start an assessment using RAG
+    console.log(`🤖 Checking for assessment intent using RAG...`);
     const assessmentIntent = await this.detectAssessmentIntentWithRag(userMessage);
     if (assessmentIntent) {
+      console.log(`🎯 Assessment intent detected: ${assessmentIntent}`);
       // Store the suggested assessment for confirmation
       await this.db.collection<UserProfile>("user_profiles").updateOne(
         { _id: userId },
@@ -215,6 +224,7 @@ export class AssessmentRagService {
       };
     }
 
+    console.log(`💬 No assessment intent detected, treating as general query`);
     // General query
     return {
       isAssessmentRequest: false,
@@ -231,29 +241,14 @@ export class AssessmentRagService {
   }
 
   /**
-   * Start a new assessment via HTTP endpoint
+   * Start a new assessment via direct service call
    */
   private async startAssessment(userId: string, assessmentName: string): Promise<string> {
     try {
-      const response = await fetch(`${this.baseUrl}/assessments/${assessmentName}/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId,
-          context: {} // Add any relevant context here
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json() as AssessmentApiResponse;
+      const result = await this.assessmentService.startAssessment(assessmentName, userId);
       
       if (result.currentStep) {
-        return result.currentStep.prompt;
+        return result.currentStep.goal_prompt;
       }
 
       return `Vamos começar a análise de ${assessmentName}. Por favor, forneça as informações necessárias.`;
@@ -264,33 +259,24 @@ export class AssessmentRagService {
   }
 
   /**
-   * Process assessment answer via HTTP endpoint
+   * Process assessment answer via direct service call
    */
   private async processAssessmentAnswer(userId: string, input: string, assessmentName: string): Promise<string> {
     try {
-      const response = await fetch(`${this.baseUrl}/assessments/${assessmentName}/answer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId,
-          answer: input
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json() as AssessmentApiResponse;
+      const result = await this.assessmentService.processAnswer(assessmentName, userId, input);
       
       if (result.status === 'completed') {
-        return this.generateCompletionMessage(result);
+        return this.generateCompletionMessage({
+          status: 'completed',
+          assessmentName,
+          results: result.results,
+          insights: result.insights,
+          progress: result.progress
+        });
       }
       
       if (result.nextStep) {
-        return result.nextStep.prompt;
+        return result.nextStep.goal_prompt;
       }
       
       return 'Por favor, continue respondendo as perguntas da análise.';
@@ -305,13 +291,19 @@ export class AssessmentRagService {
    */
   private async detectAssessmentIntentWithRag(userMessage: string): Promise<string | null> {
     try {
+      console.log(`🔍 RAG detection for: "${userMessage}"`);
+      
       // Get assessment suggestions from the embedding service
       const suggestions = await this.embeddingService.getAssessmentSuggestions(userMessage);
       
-      if (suggestions.length > 0 && suggestions[0].confidence > 0.6) {
+      console.log(`📋 RAG suggestions:`, suggestions);
+      
+      if (suggestions.length > 0 && suggestions[0].confidence > 0.8) {
+        console.log(`✅ High confidence suggestion: ${suggestions[0].suggestedAssessment} (${suggestions[0].confidence})`);
         return suggestions[0].suggestedAssessment;
       }
       
+      console.log(`❌ No high confidence suggestions, trying fallback method`);
       // Fallback to cosine similarity with assessment definitions
       return await this.detectAssessmentIntent(userMessage);
     } catch (error) {

@@ -74,6 +74,7 @@ export class AssessmentEmbeddingService {
             content: doc.content,
             embedding: [], // Not needed in response
             metadata: doc.metadata,
+            score: doc.score, // Include the similarity score
             createdAt: new Date(),
         }));
     }
@@ -187,24 +188,31 @@ export class AssessmentEmbeddingService {
      */
     async getAssessmentSuggestions(userQuery) {
         const relevantKnowledge = await this.searchAssessmentKnowledge(userQuery, 5);
-        // Group by assessment and calculate confidence
+        if (relevantKnowledge.length === 0) {
+            return [];
+        }
+        // Group by assessment and calculate confidence using actual similarity scores
         const assessmentScores = {};
         for (const item of relevantKnowledge) {
             if (item.assessment_name) {
                 if (!assessmentScores[item.assessment_name]) {
-                    assessmentScores[item.assessment_name] = { score: 0, reasons: [] };
+                    assessmentScores[item.assessment_name] = { totalScore: 0, count: 0, reasons: [] };
                 }
-                assessmentScores[item.assessment_name].score += 1;
+                // Use the similarity score from vector search (assuming it's available in metadata)
+                const similarityScore = item.score || 0.5; // Fallback if score not available
+                assessmentScores[item.assessment_name].totalScore += similarityScore;
+                assessmentScores[item.assessment_name].count += 1;
                 assessmentScores[item.assessment_name].reasons.push(item.content);
             }
         }
-        // Convert to suggestions
+        // Convert to suggestions with proper confidence calculation
         const suggestions = Object.entries(assessmentScores)
             .map(([assessment, data]) => ({
             suggestedAssessment: assessment,
-            confidence: data.score / relevantKnowledge.length,
+            confidence: data.totalScore / data.count, // Average similarity score
             reasoning: data.reasons[0] || 'Relevant to your business needs'
         }))
+            .filter(suggestion => suggestion.confidence > 0.7) // Higher threshold for relevance
             .sort((a, b) => b.confidence - a.confidence)
             .slice(0, 3);
         return suggestions;

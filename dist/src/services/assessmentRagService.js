@@ -2,13 +2,14 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import OpenAI from 'openai';
 import { AssessmentEmbeddingService } from "./assessmentEmbeddingService.js";
+import { AssessmentService } from "./assessment.service.js";
 export class AssessmentRagService {
     openai;
     embeddings;
     textSplitter;
     db;
     embeddingService;
-    baseUrl;
+    assessmentService;
     constructor(db) {
         this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         this.embeddings = new OpenAIEmbeddings({
@@ -21,7 +22,7 @@ export class AssessmentRagService {
         });
         this.db = db;
         this.embeddingService = new AssessmentEmbeddingService(db);
-        this.baseUrl = process.env.API_BASE_URL || 'https://ai-assessment-fawn.vercel.app';
+        this.assessmentService = new AssessmentService(db);
     }
     // Assessment definitions with detailed descriptions
     assessmentDefinitions = [
@@ -135,12 +136,15 @@ export class AssessmentRagService {
      * Process user message and determine if it's an assessment-related request
      */
     async processMessage(userId, userMessage) {
+        console.log(`🔍 Processing message: "${userMessage}" for user: ${userId}`);
         // Get user profile to check current assessment status
         const user = await this.db.collection("user_profiles").findOne({ _id: userId });
         const currentAssessment = user?.progress?.currentAssessment;
         const currentStepIndex = user?.progress?.stepIndex || 0;
+        console.log(`📊 User assessment status: current=${currentAssessment}, step=${currentStepIndex}`);
         // If user is in the middle of an assessment, process their answer
         if (currentAssessment && currentStepIndex > 0) {
+            console.log(`🔄 User is in assessment: ${currentAssessment}, processing answer`);
             return {
                 isAssessmentRequest: true,
                 action: 'process_answer',
@@ -151,6 +155,7 @@ export class AssessmentRagService {
         // Check if user is confirming an assessment suggestion
         const lastConversation = user?.progress?.lastAssessmentSuggestion;
         if (lastConversation && this.isConfirmation(userMessage)) {
+            console.log(`✅ User confirmed assessment suggestion: ${lastConversation}`);
             return {
                 isAssessmentRequest: true,
                 action: 'start_assessment',
@@ -159,8 +164,10 @@ export class AssessmentRagService {
             };
         }
         // Check if user wants to start an assessment using RAG
+        console.log(`🤖 Checking for assessment intent using RAG...`);
         const assessmentIntent = await this.detectAssessmentIntentWithRag(userMessage);
         if (assessmentIntent) {
+            console.log(`🎯 Assessment intent detected: ${assessmentIntent}`);
             // Store the suggested assessment for confirmation
             await this.db.collection("user_profiles").updateOne({ _id: userId }, { $set: { "progress.lastAssessmentSuggestion": assessmentIntent } });
             // Return assessment suggestion without hardcoded text - let AI handle conversation
@@ -171,6 +178,7 @@ export class AssessmentRagService {
                 response: undefined // Let AI handle the conversation
             };
         }
+        console.log(`💬 No assessment intent detected, treating as general query`);
         // General query
         return {
             isAssessmentRequest: false,
@@ -185,26 +193,13 @@ export class AssessmentRagService {
         return confirmations.some(conf => message.toLowerCase().includes(conf));
     }
     /**
-     * Start a new assessment via HTTP endpoint
+     * Start a new assessment via direct service call
      */
     async startAssessment(userId, assessmentName) {
         try {
-            const response = await fetch(`${this.baseUrl}/assessments/${assessmentName}/start`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    userId,
-                    context: {} // Add any relevant context here
-                })
-            });
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const result = await response.json();
+            const result = await this.assessmentService.startAssessment(assessmentName, userId);
             if (result.currentStep) {
-                return result.currentStep.prompt;
+                return result.currentStep.goal_prompt;
             }
             return `Vamos começar a análise de ${assessmentName}. Por favor, forneça as informações necessárias.`;
         }
@@ -214,29 +209,22 @@ export class AssessmentRagService {
         }
     }
     /**
-     * Process assessment answer via HTTP endpoint
+     * Process assessment answer via direct service call
      */
     async processAssessmentAnswer(userId, input, assessmentName) {
         try {
-            const response = await fetch(`${this.baseUrl}/assessments/${assessmentName}/answer`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    userId,
-                    answer: input
-                })
-            });
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const result = await response.json();
+            const result = await this.assessmentService.processAnswer(assessmentName, userId, input);
             if (result.status === 'completed') {
-                return this.generateCompletionMessage(result);
+                return this.generateCompletionMessage({
+                    status: 'completed',
+                    assessmentName,
+                    results: result.results,
+                    insights: result.insights,
+                    progress: result.progress
+                });
             }
             if (result.nextStep) {
-                return result.nextStep.prompt;
+                return result.nextStep.goal_prompt;
             }
             return 'Por favor, continue respondendo as perguntas da análise.';
         }
@@ -250,11 +238,15 @@ export class AssessmentRagService {
      */
     async detectAssessmentIntentWithRag(userMessage) {
         try {
+            console.log(`🔍 RAG detection for: "${userMessage}"`);
             // Get assessment suggestions from the embedding service
             const suggestions = await this.embeddingService.getAssessmentSuggestions(userMessage);
-            if (suggestions.length > 0 && suggestions[0].confidence > 0.6) {
+            console.log(`📋 RAG suggestions:`, suggestions);
+            if (suggestions.length > 0 && suggestions[0].confidence > 0.8) {
+                console.log(`✅ High confidence suggestion: ${suggestions[0].suggestedAssessment} (${suggestions[0].confidence})`);
                 return suggestions[0].suggestedAssessment;
             }
+            console.log(`❌ No high confidence suggestions, trying fallback method`);
             // Fallback to cosine similarity with assessment definitions
             return await this.detectAssessmentIntent(userMessage);
         }
