@@ -34,9 +34,11 @@ const setupServer = async () => {
             console.error('⚠️ Warning: Failed to initialize assessment knowledge base:', error);
             console.log('📝 Assessment functionality will still work with fallback methods');
         }
-        // Start cron jobs
-        const cronService = new CronService();
-        cronService.start();
+        // Start cron jobs only in development
+        if (process.env.NODE_ENV !== 'production') {
+            const cronService = new CronService();
+            cronService.start();
+        }
         // Swagger docs
         await app.register(fastifySwagger, {
             swagger: {
