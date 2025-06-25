@@ -6,6 +6,7 @@ export interface UserProfile {
     currentAssessment: string | null;
     stepIndex: number;
     answers?: Record<string, any>;
+    lastAssessmentSuggestion?: string;
   };
   profile: {
     finance?: {

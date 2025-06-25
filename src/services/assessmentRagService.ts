@@ -48,7 +48,7 @@ export class AssessmentRagService {
     });
     this.db = db;
     this.embeddingService = new AssessmentEmbeddingService(db);
-    this.baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+    this.baseUrl = process.env.API_BASE_URL || 'https://ai-assessment-fawn.vercel.app';
   }
 
   // Assessment definitions with detailed descriptions
@@ -166,7 +166,7 @@ export class AssessmentRagService {
    */
   async processMessage(userId: string, userMessage: string): Promise<{
     isAssessmentRequest: boolean;
-    action: 'start_assessment' | 'process_answer' | 'general_query';
+    action: 'start_assessment' | 'process_answer' | 'general_query' | 'suggest_assessment';
     assessmentName?: string;
     input?: string;
     response?: string;
@@ -186,14 +186,32 @@ export class AssessmentRagService {
       };
     }
 
-    // Check if user wants to start an assessment using RAG
-    const assessmentIntent = await this.detectAssessmentIntentWithRag(userMessage);
-    if (assessmentIntent) {
+    // Check if user is confirming an assessment suggestion
+    const lastConversation = user?.progress?.lastAssessmentSuggestion;
+    if (lastConversation && this.isConfirmation(userMessage)) {
       return {
         isAssessmentRequest: true,
         action: 'start_assessment',
+        assessmentName: lastConversation,
+        response: await this.startAssessment(userId, lastConversation)
+      };
+    }
+
+    // Check if user wants to start an assessment using RAG
+    const assessmentIntent = await this.detectAssessmentIntentWithRag(userMessage);
+    if (assessmentIntent) {
+      // Store the suggested assessment for confirmation
+      await this.db.collection<UserProfile>("user_profiles").updateOne(
+        { _id: userId },
+        { $set: { "progress.lastAssessmentSuggestion": assessmentIntent } }
+      );
+      
+      // Return assessment suggestion without hardcoded text - let AI handle conversation
+      return {
+        isAssessmentRequest: true,
+        action: 'suggest_assessment',
         assessmentName: assessmentIntent,
-        response: await this.startAssessment(userId, assessmentIntent)
+        response: undefined // Let AI handle the conversation
       };
     }
 
@@ -202,6 +220,14 @@ export class AssessmentRagService {
       isAssessmentRequest: false,
       action: 'general_query'
     };
+  }
+
+  /**
+   * Check if user message is a confirmation
+   */
+  private isConfirmation(message: string): boolean {
+    const confirmations = ['sim', 'yes', 'ok', 'claro', 'quero', 'vamos', 'começar', 'start', 'go'];
+    return confirmations.some(conf => message.toLowerCase().includes(conf));
   }
 
   /**
