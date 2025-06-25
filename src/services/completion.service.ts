@@ -63,13 +63,30 @@ export default class CompletionService {
     // Convert any LangChain messages to OpenAI format
     const convertedMessages = this.convertMessagesToOpenAIFormat(messages);
 
+    // Additional safety check to remove any remaining tool messages
+    const safeMessages = convertedMessages.filter(message => {
+      const isToolMessage = message.role === 'tool' || 
+                           ('tool_call_id' in message && !('tool_calls' in message));
+      if (isToolMessage) {
+        console.log(`❌ Removing tool message in final check:`, message);
+        return false;
+      }
+      return true;
+    });
+
     const allMessages: ChatCompletionMessageParam[] = [
       systemMessage,
-      ...convertedMessages,
+      ...safeMessages,
       ...userMessages,
     ];
 
     console.log('Messages sent to OpenAI:', JSON.stringify(allMessages, null, 2));
+
+    // Additional debug logging for tool messages
+    const toolMessages = allMessages.filter(msg => msg.role === 'tool');
+    if (toolMessages.length > 0) {
+      console.log('⚠️ Warning: Found tool messages in final message array:', toolMessages);
+    }
 
     const response = await this.openAIService.createChatCompletion({
       messages: allMessages,
@@ -127,12 +144,9 @@ export default class CompletionService {
         } else if (type === 'system') {
           return { role: 'system', content: message.content };
         } else if (type === 'tool') {
-          return { 
-            role: 'tool', 
-            tool_call_id: message.tool_call_id,
-            name: message.name,
-            content: message.content 
-          };
+          // Skip tool messages as they don't have corresponding tool_calls in history
+          console.log(`❌ Skipping tool message in conversion:`, message);
+          return null;
         }
       }
       

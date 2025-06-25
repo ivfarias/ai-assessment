@@ -113,13 +113,16 @@ export default class QueryService {
         content: "Tool execution completed successfully."
       };
 
+      // Clean the history again before the followup call to ensure no tool messages
+      const cleanHistoryForFollowup = this.removeAllToolMessages(chatHistory.chat_history || []);
+
       const followup = await this.completionService.generateContextualResponse({
         query,
         context: options.context,
         vectorResults: topResults,
         historySummary,
         messages: [
-          ...cleanHistory,
+          ...cleanHistoryForFollowup,
           firstResponse,
           toolResponse
         ]
@@ -147,16 +150,22 @@ export default class QueryService {
     console.log('🗑️ Removing all tool messages from history, original length:', messages.length);
     
     const filtered = messages.filter(message => {
-      const isToolMessage = message.role === 'tool' || 
-                           (message._getType && message._getType() === 'tool') ||
-                           (message.name && message.tool_call_id);
+      // Check for various tool message indicators (safety net)
+      const isToolMessage = 
+        message.role === 'tool' || 
+        (message._getType && message._getType() === 'tool') ||
+        (message.name && message.tool_call_id) ||
+        (message.tool_call_id && !message.tool_calls) || // Tool response without corresponding tool_calls
+        (message.content && typeof message.content === 'string' && 
+         (message.content.includes('current_step_goal') || 
+          message.content.includes('tool_call_id') ||
+          message.content.includes('ToolMessage')));
       
       if (isToolMessage) {
         console.log(`❌ Removing tool message:`, message);
         return false;
       }
       
-      console.log(`✅ Keeping message:`, message.role || message._getType?.());
       return true;
     });
 
