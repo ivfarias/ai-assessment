@@ -48,14 +48,55 @@ export default class CompletionService {
 
     const systemMessage: ChatCompletionMessageParam = {
       role: 'system',
-      content: `${process.env.SYSTEM_PROMPT || 'You are a helpful business consultant AI assistant.'}
+      content: `${process.env.SYSTEM_PROMPT || `You are "Kyte AI", a specialist business assistant for small and micro-business owners in Brazil. Your personality is encouraging, practical, and extremely helpful. You are a coach, not just a search engine.
+
+Core Mission:
+Help small business owners grow their businesses by providing clear, actionable advice and guiding them through relevant business assessments.
+
+Assessment Strategy:
+You have access to 10 different business assessments that analyze various aspects of a business:
+- simulateProfit: Analyzes profitability and margins
+- financialHealthRadar: Evaluates financial stability and cash flow
+- operationalIndependenceTest: Measures business dependency on the owner
+- toolScanner: Analyzes current tools and technology stack
+- standardizationThermometer: Evaluates product/service consistency
+- customerLoyaltyPanel: Analyzes customer retention and loyalty
+- customerAcquisitionMap: Maps customer acquisition channels
+- marketStrategyScanner: Evaluates competitive positioning
+- organizationalXray: Analyzes team structure and culture
+- contextDiagnosis: Comprehensive business context analysis
+
+Your Approach:
+1. **Active Listening**: Pay attention to what users share about their business challenges, goals, and situations
+2. **Proactive Suggestions**: When you identify business needs or improvement opportunities, naturally suggest relevant assessments
+3. **Contextual Recommendations**: Base your suggestions on their specific situation, business stage, and what you've learned about them
+4. **Natural Presentation**: Present assessments as helpful tools, not tests. Use phrases like "Que tal fazermos uma análise específica do seu negócio?"
+5. **Adaptive Learning**: Use their business stage (Momento Sobrevivência, Organização, Crescimento) to tailor your approach
+
+When to Suggest Assessments:
+- When users mention business challenges or problems
+- When they ask for help improving specific areas
+- When they express growth goals or ambitions
+- When you identify gaps in their business understanding
+- When they're new and need guidance on where to start
+
+How to Present Assessments:
+Offer them naturally in conversation, highlighting why they're relevant to their specific situation. For example:
+"Baseado no que você me contou sobre [their specific challenge], acho que uma análise de [specific assessment] pode te ajudar muito. Que tal fazermos isso?"
+
+Use the assessment tools when users want to:
+- Start a specific assessment (use start_assessment)
+- Answer assessment questions (use process_assessment_answer)
+- Get assessment suggestions (use suggest_assessment)
+
+Always maintain natural conversation flow and be genuinely helpful.`}
 
 Available Business Assessments:
 ${assessmentInfo}
 
 You can help users with business analysis by:
 1. Having natural conversations about their business
-2. Suggesting relevant assessments when appropriate
+2. Proactively suggesting relevant assessments based on their needs
 3. Starting assessments when users want to do them
 4. Processing assessment answers and providing insights
 
@@ -64,7 +105,7 @@ Use the assessment tools when users want to:
 - Answer assessment questions (use process_assessment_answer)
 - Get assessment suggestions (use suggest_assessment)
 
-Always maintain natural conversation flow and only use assessments when the user explicitly wants them.`,
+Always maintain natural conversation flow and be proactive in helping their business grow.`,
     };
 
     let userMessages: ChatCompletionMessageParam[] = [];
@@ -212,35 +253,20 @@ Always maintain natural conversation flow and only use assessments when the user
     const { user_id, user_query } = args;
     
     try {
-      // Get available assessments and suggest based on user query
+      // Get available assessments
       const availableAssessments = this.assessmentRagService.getAvailableAssessments();
       
-      // Simple keyword matching for suggestions
-      const lowerQuery = user_query.toLowerCase();
-      const suggestions = availableAssessments.filter(assessment => {
-        const keywords = [
-          'lucro', 'profit', 'financeiro', 'financial', 'dinheiro', 'money',
-          'ferramentas', 'tools', 'tecnologia', 'technology',
-          'clientes', 'customers', 'fidelização', 'loyalty',
-          'operacional', 'operational', 'processos', 'processes',
-          'estratégia', 'strategy', 'mercado', 'market',
-          'organização', 'organization', 'equipe', 'team'
-        ];
-        
-        return keywords.some(keyword => 
-          lowerQuery.includes(keyword) || 
-          assessment.description.toLowerCase().includes(keyword)
-        );
-      });
-
-      if (suggestions.length === 0) {
-        return 'Desculpe, não consegui identificar uma análise adequada para sua situação. Pode me contar mais sobre o que você gostaria de melhorar no seu negócio?';
-      }
-
-      const bestSuggestion = suggestions[0];
-      const assessmentList = suggestions.map(a => `• ${a.name}: ${a.description}`).join('\n');
+      // Create a simple, clean assessment menu
+      const assessmentMenu = availableAssessments.map(a => 
+        `• **${a.name}**: ${a.description}`
+      ).join('\n');
       
-      return `Com base no que você mencionou, aqui estão algumas análises que podem ajudar:\n\n${assessmentList}\n\nQual dessas análises você gostaria de fazer?`;
+      return `🎯 Que tal fazermos uma análise específica do seu negócio? Tenho várias opções que podem te ajudar:
+
+📊 **Análises Disponíveis:**
+${assessmentMenu}
+
+💡 **Dica**: Baseado no que você me contou, posso recomendar as análises mais relevantes para sua situação. Qual área você gostaria de melhorar primeiro? 🤔`;
     } catch (error) {
       console.error('Error handling assessment suggestion:', error);
       return 'Desculpe, houve um erro ao sugerir análises. Pode me contar mais sobre o que você gostaria de melhorar no seu negócio?';
@@ -358,19 +384,7 @@ Always maintain natural conversation flow and only use assessments when the user
   }
 
   /**
-   * Determines if a message is a confirmation to start an assessment
-   */
-  private isConfirmation(message: string): boolean {
-    const confirmations = ['sim', 'yes', 'ok', 'claro', 'quero', 'vamos', 'começar', 'start', 'go', 'okay'];
-    const lowerMessage = message.toLowerCase().trim();
-    return confirmations.some(conf => lowerMessage.includes(conf));
-  }
-
-  /**
    * Formats vector results into a readable string
-   * @param results - Array of vector results to format
-   * @returns Formatted string of vector results
-   * @private
    */
   private formatVectorResults(results: IVectorResult[]): string {
     return results.map((result, index) => `${index + 1}. ${result.text}`).join('\n');
@@ -387,22 +401,5 @@ Always maintain natural conversation flow and only use assessments when the user
     
     const lowerQuery = query.toLowerCase().trim();
     return greetingKeywords.some(keyword => lowerQuery === keyword || lowerQuery.startsWith(keyword + ' '));
-  }
-
-  /**
-   * Determines if a query is assessment-related
-   */
-  private isAssessmentRelatedQuery(query: string): boolean {
-    const assessmentKeywords = [
-      'avaliação', 'assessment', 'análise', 'analysis', 'diagnóstico', 'diagnosis',
-      'simular', 'simulate', 'lucro', 'profit', 'saúde financeira', 'financial health',
-      'radar', 'independência operacional', 'operational independence', 'ferramentas',
-      'tools', 'padronização', 'standardization', 'fidelização', 'loyalty', 'clientes',
-      'customers', 'aquisição', 'acquisition', 'estratégia', 'strategy', 'mercado',
-      'market', 'organização', 'organization', 'contexto', 'context'
-    ];
-    
-    const lowerQuery = query.toLowerCase();
-    return assessmentKeywords.some(keyword => lowerQuery.includes(keyword));
   }
 }

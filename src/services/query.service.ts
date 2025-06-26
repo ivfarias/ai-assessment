@@ -320,17 +320,13 @@ export default class QueryService {
    * Determines if a query is assessment-related
    */
   private isAssessmentRelatedQuery(query: string): boolean {
-    const assessmentKeywords = [
-      'avaliação', 'assessment', 'análise', 'analysis', 'diagnóstico', 'diagnosis',
-      'simular', 'simulate', 'lucro', 'profit', 'saúde financeira', 'financial health',
-      'radar', 'independência operacional', 'operational independence', 'ferramentas',
-      'tools', 'padronização', 'standardization', 'fidelização', 'loyalty', 'clientes',
-      'customers', 'aquisição', 'acquisition', 'estratégia', 'strategy', 'mercado',
-      'market', 'organização', 'organization', 'contexto', 'context'
-    ];
-    
+    // Simple check - let the AI handle the complexity
     const lowerQuery = query.toLowerCase();
-    return assessmentKeywords.some(keyword => lowerQuery.split(/\s+/).includes(keyword));
+    
+    // Only check for very basic business-related terms
+    const businessTerms = ['negócio', 'business', 'empresa', 'company', 'melhorar', 'improve', 'ajuda', 'help'];
+    
+    return businessTerms.some(term => lowerQuery.includes(term));
   }
 
   /**
@@ -358,5 +354,19 @@ export default class QueryService {
     
     const lowerQuery = query.toLowerCase().trim();
     return greetingKeywords.some(keyword => lowerQuery === keyword || lowerQuery.startsWith(keyword + ' '));
+  }
+
+  /**
+   * Determines if the AI should proactively offer an assessment based on the query and context
+   */
+  private shouldProactivelyOfferAssessment(query: string, context: any): boolean {
+    // Simple check - don't offer if user is already in an assessment
+    if (context?.progress?.currentAssessment) {
+      return false;
+    }
+    
+    // Let the AI handle the complexity of determining when to offer assessments
+    // This is just a basic filter to prevent obvious conflicts
+    return true;
   }
 }
