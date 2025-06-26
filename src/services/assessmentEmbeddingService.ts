@@ -254,7 +254,7 @@ export class AssessmentEmbeddingService {
         confidence: data.totalScore / data.count, // Average similarity score
         reasoning: data.reasons.slice(0, 2).join('\n\n') || 'Relevant to your business needs'
       }))
-      .filter(suggestion => suggestion.confidence > 0.7) // Higher threshold for relevance
+      .filter(suggestion => suggestion.confidence > 0.5) // Higher threshold for relevance
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 3);
     
