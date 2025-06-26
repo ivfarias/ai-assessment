@@ -122,8 +122,10 @@ export default class QueryService {
 
     const historySummary = await this.summaryService.summarizeChatHistory(chatHistory);
 
-    // Completely remove all tool messages from history for the initial call
-    const cleanHistory = this.removeAllToolMessages(chatHistory.chat_history || []);
+    // Filter tool messages, but keep those containing "current_step_goal"
+    const cleanHistory = chatHistory.chat_history?.filter(
+      m => m.role !== 'tool' || m.content?.includes('"current_step_goal"')
+    ) ?? [];
 
     const firstResponse = await this.completionService.generateContextualResponse({
       query,
@@ -221,7 +223,7 @@ export default class QueryService {
     ];
     
     const lowerQuery = query.toLowerCase();
-    return assessmentKeywords.some(keyword => lowerQuery.includes(keyword));
+    return assessmentKeywords.some(keyword => lowerQuery.split(/\s+/).includes(keyword));
   }
 
   /**

@@ -181,8 +181,19 @@ export class AssessmentRagService {
 
     console.log(`📊 User assessment status: current=${currentAssessment}, step=${currentStepIndex}`);
 
-    // If user is in the middle of an assessment, process their answer
-    if (currentAssessment && currentStepIndex > 0) {
+    // If user is in the middle of an assessment, process their answer or handle step 0 fallback
+    if (currentAssessment && currentStepIndex >= 0) {
+      // Step 0 handler fallback
+      if (currentStepIndex === 0) {
+        console.log(`⚡ Triggering step 0 prompt for assessment: ${currentAssessment}`);
+        const result = await this.assessmentService.startAssessment(currentAssessment, userId);
+        return {
+          isAssessmentRequest: true,
+          action: 'start_assessment',
+          assessmentName: currentAssessment,
+          response: result.currentStep?.goal_prompt
+        };
+      }
       console.log(`🔄 User is in assessment: ${currentAssessment}, processing answer`);
       return {
         isAssessmentRequest: true,
@@ -196,11 +207,16 @@ export class AssessmentRagService {
     const lastConversation = user?.progress?.lastAssessmentSuggestion;
     if (lastConversation && this.isConfirmation(userMessage)) {
       console.log(`✅ User confirmed assessment suggestion: ${lastConversation}`);
+      const response = await this.startAssessment(userId, lastConversation);
+      await this.db.collection<UserProfile>("user_profiles").updateOne(
+        { _id: userId },
+        { $unset: { "progress.lastAssessmentSuggestion": "" } }
+      );
       return {
         isAssessmentRequest: true,
         action: 'start_assessment',
         assessmentName: lastConversation,
-        response: await this.startAssessment(userId, lastConversation)
+        response
       };
     }
 

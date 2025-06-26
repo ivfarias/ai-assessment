@@ -148,8 +148,16 @@ export async function processAssessment(userId: string, db: Db, assessmentName?:
   let currentStepIndex = user.progress?.stepIndex ?? 0;
   let answers = user.progress?.answers ?? {};
 
+  if (!input && currentStepIndex === 0) {
+    return {
+      current_step_goal: assessment.steps[0],
+      stepIndex: 0,
+      totalSteps: assessment.steps.length
+    };
+  }
+
   // Case 2: Processing an answer for the previous step
-  if (input !== undefined && currentStepIndex > 0) {
+  if (input !== undefined) {
     const previousStep = assessment.steps[currentStepIndex - 1];
     answers[previousStep.key] = input;
     currentStepIndex++;

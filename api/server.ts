@@ -1,3 +1,4 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import fastify, { FastifyInstance } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
@@ -12,7 +13,9 @@ import { CronService } from '../src/services/cron.service.js';
 import { AssessmentEmbeddingService } from '../src/services/assessmentEmbeddingService.js';
 import { getDb } from '../src/config/mongodb.js';
 
-dotenv.config();
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 
 let serverInstance: FastifyInstance | undefined = undefined;
 
@@ -123,7 +126,7 @@ if (process.env.NODE_ENV !== 'production') {
       const server = await setupServer();
       await server.listen({
         port: Number(process.env.PORT) || 3000,
-        host: 'localhost',
+        host: '0.0.0.0',
       });
     } catch (err) {
       console.error('Failed to start server:', err);
@@ -133,7 +136,7 @@ if (process.env.NODE_ENV !== 'production') {
   start();
 }
 
-export default async (req, res) => {
+export default async (req: VercelRequest, res: VercelResponse) => {
   try {
     const server = await setupServer();
     server.server.emit('request', req, res);

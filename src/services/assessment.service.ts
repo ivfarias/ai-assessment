@@ -18,6 +18,8 @@ import * as contextDiagnosis from "./assessments/contextDiagnosis.js";
 interface AssessmentStep {
   key: string;
   goal_prompt: string;
+  expected_type?: 'number' | '1-5' | 'text';
+  examples?: string[];
 }
 
 interface AssessmentDefinition {
@@ -175,6 +177,15 @@ export class AssessmentService {
         profile: {}
       };
       await this.db.collection<UserProfile>("user_profiles").insertOne(user as any);
+    }
+
+    // Guard: If already in progress for this assessment, return in_progress status
+    if (user?.progress?.currentAssessment === assessmentName) {
+      return {
+        status: 'in_progress',
+        currentStep: assessment.steps[user.progress.stepIndex || 0],
+        progress: { current: user.progress.stepIndex || 0, total: assessment.steps.length }
+      };
     }
 
     // Start the assessment

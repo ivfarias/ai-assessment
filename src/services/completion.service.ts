@@ -49,27 +49,12 @@ export default class CompletionService {
     if (query) {
       // Determine if this is a simple greeting to reduce context
       const isSimpleGreeting = this.isSimpleGreeting(query);
-      const isAssessmentQuery = this.isAssessmentRelatedQuery(query);
       
       let content: string;
       
       if (isSimpleGreeting) {
-        // For simple greetings, provide minimal context
         content = `User Query: "${query}"`;
-      } else if (isAssessmentQuery) {
-        // For assessment queries, focus on assessment context
-        content = [
-          `User Query: "${query}"`,
-          `User Profile Context: ${JSON.stringify(context, null, 2)}`,
-          '',
-          'Conversation Summary:',
-          historySummary,
-          '',
-          'Relevant business context:',
-          vectorContext,
-        ].join('\n');
       } else {
-        // For other queries, provide full context
         content = [
           `User Query: "${query}"`,
           `User Profile Context: ${JSON.stringify(context, null, 2)}`,
@@ -148,8 +133,8 @@ export default class CompletionService {
     return messages.map(message => {
       // If it's already in OpenAI format, check if it's a tool message first
       if (message.role) {
-        // Skip tool messages immediately
-        if (message.role === 'tool') {
+        // Skip most tool messages, but preserve those containing "current_step_goal"
+        if (message.role === 'tool' && !message.content?.includes('"current_step_goal"')) {
           return null;
         }
         // Return other messages as-is
@@ -168,7 +153,7 @@ export default class CompletionService {
         } else if (type === 'system') {
           return { role: 'system', content: message.content };
         } else if (type === 'tool') {
-          // Skip tool messages
+          // Skip tool messages (cannot check content here as not available)
           return null;
         }
       }

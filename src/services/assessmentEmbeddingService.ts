@@ -239,7 +239,8 @@ export class AssessmentEmbeddingService {
           assessmentScores[item.assessment_name] = { totalScore: 0, count: 0, reasons: [] };
         }
         // Use the similarity score from vector search (assuming it's available in metadata)
-        const similarityScore = (item as any).score || 0.5; // Fallback if score not available
+        const similarityScore = typeof item.score === 'number' ? item.score : null;
+        if (similarityScore === null) continue;
         assessmentScores[item.assessment_name].totalScore += similarityScore;
         assessmentScores[item.assessment_name].count += 1;
         assessmentScores[item.assessment_name].reasons.push(item.content);
@@ -251,7 +252,7 @@ export class AssessmentEmbeddingService {
       .map(([assessment, data]) => ({
         suggestedAssessment: assessment,
         confidence: data.totalScore / data.count, // Average similarity score
-        reasoning: data.reasons[0] || 'Relevant to your business needs'
+        reasoning: data.reasons.slice(0, 2).join('\n\n') || 'Relevant to your business needs'
       }))
       .filter(suggestion => suggestion.confidence > 0.7) // Higher threshold for relevance
       .sort((a, b) => b.confidence - a.confidence)
