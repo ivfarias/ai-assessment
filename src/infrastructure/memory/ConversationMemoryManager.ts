@@ -2,7 +2,6 @@ import { BufferMemory } from 'langchain/memory';
 import { MongoDBChatMessageHistory } from '@langchain/mongodb';
 import { Collection } from 'mongodb';
 import { IConversationMemoryManager } from '../../domain/interfaces/conversation.js';
-import { BaseMessage, ToolMessage } from '@langchain/core/messages';
 
 export default class ConversationMemoryManager implements IConversationMemoryManager {
   private memories: Map<string, BufferMemory>;
@@ -27,16 +26,6 @@ export default class ConversationMemoryManager implements IConversationMemoryMan
         inputKey: 'input',
         outputKey: 'output',
       });
-
-      // Override the addMessages method to filter out tool messages
-      const originalAddMessages = memory.chatHistory.addMessages.bind(memory.chatHistory);
-      memory.chatHistory.addMessages = async (messages: BaseMessage[]) => {
-        // Filter out tool messages before storing
-        const filteredMessages = messages.filter(message => !(message instanceof ToolMessage));
-        if (filteredMessages.length > 0) {
-          await originalAddMessages(filteredMessages);
-        }
-      };
 
       this.memories.set(userId, memory);
     }

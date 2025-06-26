@@ -90,13 +90,14 @@ export default class QueryService {
                 name: toolCall.function.name,
                 content: "Tool execution completed successfully."
             };
+            // For the followup call, only include the current response and tool response
+            // Don't include any history that might have problematic tool messages
             const followup = await this.completionService.generateContextualResponse({
                 query,
                 context: options.context,
                 vectorResults: topResults,
                 historySummary,
                 messages: [
-                    ...cleanHistory,
                     firstResponse,
                     toolResponse
                 ]
@@ -120,14 +121,13 @@ export default class QueryService {
     removeAllToolMessages(messages) {
         console.log('🗑️ Removing all tool messages from history, original length:', messages.length);
         const filtered = messages.filter(message => {
+            // Simple check for tool messages
             const isToolMessage = message.role === 'tool' ||
-                (message._getType && message._getType() === 'tool') ||
-                (message.name && message.tool_call_id);
+                (message._getType && message._getType() === 'tool');
             if (isToolMessage) {
                 console.log(`❌ Removing tool message:`, message);
                 return false;
             }
-            console.log(`✅ Keeping message:`, message.role || message._getType?.());
             return true;
         });
         console.log('🗑️ After removing tool messages, length:', filtered.length);

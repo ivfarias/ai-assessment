@@ -63,16 +63,14 @@ export default class CompletionService {
     // Convert any LangChain messages to OpenAI format
     const convertedMessages = this.convertMessagesToOpenAIFormat(messages);
 
-    // Additional safety check to remove any remaining tool messages
-    const safeMessages = convertedMessages.filter(message => {
-      const isToolMessage = message.role === 'tool' || 
-                           ('tool_call_id' in message && !('tool_calls' in message));
-      if (isToolMessage) {
-        console.log(`❌ Removing tool message in final check:`, message);
-        return false;
-      }
-      return true;
-    });
+    // Simple filter to remove any tool messages
+    const safeMessages = convertedMessages.filter(message => message.role !== 'tool');
+
+    // Debug logging
+    const toolMessagesInConverted = convertedMessages.filter(msg => msg.role === 'tool');
+    if (toolMessagesInConverted.length > 0) {
+      console.log('⚠️ Found tool messages in converted messages:', toolMessagesInConverted);
+    }
 
     const allMessages: ChatCompletionMessageParam[] = [
       systemMessage,
@@ -81,12 +79,6 @@ export default class CompletionService {
     ];
 
     console.log('Messages sent to OpenAI:', JSON.stringify(allMessages, null, 2));
-
-    // Additional debug logging for tool messages
-    const toolMessages = allMessages.filter(msg => msg.role === 'tool');
-    if (toolMessages.length > 0) {
-      console.log('⚠️ Warning: Found tool messages in final message array:', toolMessages);
-    }
 
     const response = await this.openAIService.createChatCompletion({
       messages: allMessages,
@@ -129,9 +121,16 @@ export default class CompletionService {
    */
   private convertMessagesToOpenAIFormat(messages: any[]): ChatCompletionMessageParam[] {
     return messages.map(message => {
-      // If it's already in OpenAI format, return as is
-      if (message.role && (message.content || message.tool_calls)) {
-        return message;
+      // If it's already in OpenAI format, check if it's a tool message first
+      if (message.role) {
+        // Skip tool messages immediately
+        if (message.role === 'tool') {
+          return null;
+        }
+        // Return other messages as-is
+        if (message.content || message.tool_calls) {
+          return message;
+        }
       }
       
       // If it's a LangChain message, convert it
@@ -144,8 +143,7 @@ export default class CompletionService {
         } else if (type === 'system') {
           return { role: 'system', content: message.content };
         } else if (type === 'tool') {
-          // Skip tool messages as they don't have corresponding tool_calls in history
-          console.log(`❌ Skipping tool message in conversion:`, message);
+          // Skip tool messages
           return null;
         }
       }

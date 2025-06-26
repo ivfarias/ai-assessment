@@ -42,9 +42,16 @@ export default class CompletionService {
         }
         // Convert any LangChain messages to OpenAI format
         const convertedMessages = this.convertMessagesToOpenAIFormat(messages);
+        // Simple filter to remove any tool messages
+        const safeMessages = convertedMessages.filter(message => message.role !== 'tool');
+        // Debug logging
+        const toolMessagesInConverted = convertedMessages.filter(msg => msg.role === 'tool');
+        if (toolMessagesInConverted.length > 0) {
+            console.log('⚠️ Found tool messages in converted messages:', toolMessagesInConverted);
+        }
         const allMessages = [
             systemMessage,
-            ...convertedMessages,
+            ...safeMessages,
             ...userMessages,
         ];
         console.log('Messages sent to OpenAI:', JSON.stringify(allMessages, null, 2));
@@ -80,9 +87,16 @@ export default class CompletionService {
      */
     convertMessagesToOpenAIFormat(messages) {
         return messages.map(message => {
-            // If it's already in OpenAI format, return as is
-            if (message.role && (message.content || message.tool_calls)) {
-                return message;
+            // If it's already in OpenAI format, check if it's a tool message first
+            if (message.role) {
+                // Skip tool messages immediately
+                if (message.role === 'tool') {
+                    return null;
+                }
+                // Return other messages as-is
+                if (message.content || message.tool_calls) {
+                    return message;
+                }
             }
             // If it's a LangChain message, convert it
             if (message._getType) {
@@ -97,12 +111,8 @@ export default class CompletionService {
                     return { role: 'system', content: message.content };
                 }
                 else if (type === 'tool') {
-                    return {
-                        role: 'tool',
-                        tool_call_id: message.tool_call_id,
-                        name: message.name,
-                        content: message.content
-                    };
+                    // Skip tool messages
+                    return null;
                 }
             }
             // If it's an unknown format, try to extract role and content
