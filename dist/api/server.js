@@ -11,7 +11,9 @@ import db from '../src/config/mongodb.js';
 import { CronService } from '../src/services/cron.service.js';
 import { AssessmentEmbeddingService } from '../src/services/assessmentEmbeddingService.js';
 import { getDb } from '../src/config/mongodb.js';
-dotenv.config();
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config();
+}
 let serverInstance = undefined;
 const setupServer = async () => {
     if (serverInstance) {
@@ -23,17 +25,19 @@ const setupServer = async () => {
     try {
         // Database
         await app.register(db);
-        // Initialize assessment knowledge base
-        try {
-            console.log('🚀 Initializing assessment knowledge base...');
-            const embeddingService = new AssessmentEmbeddingService(getDb());
-            await embeddingService.initializeKnowledgeBase();
-            console.log('✅ Assessment knowledge base initialized successfully!');
-        }
-        catch (error) {
-            console.error('⚠️ Warning: Failed to initialize assessment knowledge base:', error);
-            console.log('📝 Assessment functionality will still work with fallback methods');
-        }
+        // Initialize assessment knowledge base - make it non-blocking
+        setTimeout(async () => {
+            try {
+                console.log('🚀 Initializing assessment knowledge base...');
+                const embeddingService = new AssessmentEmbeddingService(getDb());
+                await embeddingService.initializeKnowledgeBase();
+                console.log('✅ Assessment knowledge base initialized successfully!');
+            }
+            catch (error) {
+                console.error('⚠️ Warning: Failed to initialize assessment knowledge base:', error);
+                console.log('📝 Assessment functionality will still work with fallback methods');
+            }
+        }, 1000); // Delay initialization to not block server startup
         // Start cron jobs only in development
         if (process.env.NODE_ENV !== 'production') {
             const cronService = new CronService();
@@ -107,7 +111,7 @@ if (process.env.NODE_ENV !== 'production') {
             const server = await setupServer();
             await server.listen({
                 port: Number(process.env.PORT) || 3000,
-                host: 'localhost',
+                host: '0.0.0.0',
             });
         }
         catch (err) {

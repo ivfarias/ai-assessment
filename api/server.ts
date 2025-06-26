@@ -32,16 +32,18 @@ const setupServer = async () => {
     // Database
     await app.register(db);
 
-    // Initialize assessment knowledge base
-    try {
-      console.log('🚀 Initializing assessment knowledge base...');
-      const embeddingService = new AssessmentEmbeddingService(getDb());
-      await embeddingService.initializeKnowledgeBase();
-      console.log('✅ Assessment knowledge base initialized successfully!');
-    } catch (error) {
-      console.error('⚠️ Warning: Failed to initialize assessment knowledge base:', error);
-      console.log('📝 Assessment functionality will still work with fallback methods');
-    }
+    // Initialize assessment knowledge base - make it non-blocking
+    setTimeout(async () => {
+      try {
+        console.log('🚀 Initializing assessment knowledge base...');
+        const embeddingService = new AssessmentEmbeddingService(getDb());
+        await embeddingService.initializeKnowledgeBase();
+        console.log('✅ Assessment knowledge base initialized successfully!');
+      } catch (error) {
+        console.error('⚠️ Warning: Failed to initialize assessment knowledge base:', error);
+        console.log('📝 Assessment functionality will still work with fallback methods');
+      }
+    }, 1000); // Delay initialization to not block server startup
 
     // Start cron jobs only in development
     if (process.env.NODE_ENV !== 'production') {

@@ -86,6 +86,9 @@ export default class WhatsAppService {
      */
     async handleMessage(message) {
         const userMessage = message.text.body;
+        if (!message.text?.body) {
+            throw new Error("Unsupported or empty message body");
+        }
         const userId = message.from;
         const db = getDb();
         // Reactivate user if they were inactive
@@ -93,7 +96,6 @@ export default class WhatsAppService {
         if (userProfile?.status === 'inactive') {
             await db.collection("user_profiles").updateOne({ _id: userId }, { $set: { status: 'active', updatedAt: new Date() } });
             // Refetch profile to ensure subsequent logic uses the updated version
-            Object.assign(userProfile, { status: 'active' });
         }
         else if (userProfile) {
             // Also update timestamp for active users on new message
@@ -111,6 +113,9 @@ export default class WhatsAppService {
                 progress: userProfile?.progress
             }
         });
+        if (!response?.answer) {
+            console.error('No response returned by queryService for message:', userMessage);
+        }
         const finalAnswer = response?.answer || '[Resposta não encontrada]';
         this.messageCache.setLastConversation(userId, {
             query: userMessage,

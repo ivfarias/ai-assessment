@@ -6,6 +6,7 @@ import SummaryService from './summary.service.js';
 import CompletionService from './completion.service.js';
 import { getDb } from '../config/mongodb.js';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import { AssessmentRagService } from './assessmentRagService.js';
 /**
  * Service for processing and handling user queries
  */
@@ -16,6 +17,7 @@ export default class QueryService {
     vectorRepository;
     conversationManager;
     summaryService;
+    assessmentRagService;
     constructor() {
         this.openAIService = new OpenAIService();
         this.messageCache = new MessageCache();
@@ -23,6 +25,7 @@ export default class QueryService {
         this.conversationManager = new ConversationManager(getDb().collection('ChatHistory'));
         this.summaryService = new SummaryService();
         this.completionService = new CompletionService(this.openAIService);
+        this.assessmentRagService = new AssessmentRagService(getDb());
     }
     /**
      * Process a query against embedded documents
@@ -49,6 +52,46 @@ export default class QueryService {
      * @returns Promise containing the query response
      */
     async processComplexQuery(query, options) {
+        try {
+            // First, check if this is an assessment-related request using RAG
+            console.log(`🔍 Processing query: "${query}" for user: ${options.userId}`);
+            const assessmentResult = await this.assessmentRagService.processMessage(options.userId, query);
+            console.log(`📊 Assessment result:`, assessmentResult);
+            if (assessmentResult.isAssessmentRequest) {
+                console.log(`🎯 Assessment request detected: ${assessmentResult.action}`);
+                let response = '';
+                switch (assessmentResult.action) {
+                    case 'start_assessment':
+                        response = assessmentResult.response || 'Vamos começar a avaliação.';
+                        break;
+                    case 'process_answer':
+                        response = assessmentResult.response || 'Processando sua resposta...';
+                        break;
+                    case 'suggest_assessment':
+                        response = assessmentResult.response || 'Sugerindo avaliação...';
+                        break;
+                    default:
+                        response = assessmentResult.response || 'Processando...';
+                }
+                console.log(`💬 Assessment response: ${response}`);
+                // Store the conversation
+                const memory = await this.conversationManager.getMemory(options.userId);
+                await memory.chatHistory.addMessages([
+                    new HumanMessage(query),
+                    new AIMessage(response),
+                ]);
+                return {
+                    matches: [],
+                    answer: response,
+                };
+            }
+            console.log(`💬 No assessment request, proceeding with normal query processing`);
+        }
+        catch (error) {
+            console.error('❌ Error in assessment processing:', error);
+            // Continue with normal query processing if assessment processing fails
+        }
+        // If not an assessment request, proceed with normal query processing
         const docsCollection = getDb().collection('KyteDocs');
         const macroCsCollection = getDb().collection('MacroCS');
         const queryVector = await this.openAIService.createEmbedding(query);
@@ -102,8 +145,19 @@ export default class QueryService {
         const memory = await this.conversationManager.getMemory(options.userId);
         const chatHistory = await memory.loadMemoryVariables({});
         const historySummary = await this.summaryService.summarizeChatHistory(chatHistory);
-        // Completely remove all tool messages from history for the initial call
-        const cleanHistory = this.removeAllToolMessages(chatHistory.chat_history || []);
+        // Improved tool message filtering - keep assessment-related tool messages
+        const cleanHistory = chatHistory.chat_history?.filter(m => {
+            if (m.role !== 'tool')
+                return true;
+            // Keep tool messages that contain assessment step information
+            if (m.content?.includes('"current_step_goal"') ||
+                m.content?.includes('"goal_prompt"') ||
+                m.content?.includes('assessment') ||
+                m.content?.includes('step')) {
+                return true;
+            }
+            return false;
+        }) ?? [];
         const firstResponse = await this.completionService.generateContextualResponse({
             query,
             context: options.context,
@@ -186,7 +240,7 @@ export default class QueryService {
             'market', 'organização', 'organization', 'contexto', 'context'
         ];
         const lowerQuery = query.toLowerCase();
-        return assessmentKeywords.some(keyword => lowerQuery.includes(keyword));
+        return assessmentKeywords.some(keyword => lowerQuery.split(/\s+/).includes(keyword));
     }
     /**
      * Determines if a query is support-related

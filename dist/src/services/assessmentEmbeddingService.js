@@ -20,63 +20,127 @@ export class AssessmentEmbeddingService {
      * Initialize the assessment knowledge base with predefined content
      */
     async initializeKnowledgeBase() {
-        const collection = this.db.collection('AssessmentKnowledge');
-        // Check if knowledge base already exists
-        const existingCount = await collection.countDocuments();
-        if (existingCount > 0) {
-            console.log('Assessment knowledge base already exists, skipping initialization');
-            return;
-        }
-        const knowledgeItems = this.generateKnowledgeItems();
-        for (const item of knowledgeItems) {
-            const embedding = await this.embeddings.embedQuery(item.content);
-            await collection.insertOne({
+        try {
+            const collection = this.db.collection('AssessmentKnowledge');
+            // Check if knowledge base already exists
+            const existingCount = await collection.countDocuments();
+            if (existingCount > 0) {
+                console.log('Assessment knowledge base already exists, skipping initialization');
+                return;
+            }
+            const knowledgeItems = this.generateKnowledgeItems();
+            console.log(`Creating ${knowledgeItems.length} knowledge items...`);
+            // Create items without embeddings for now - we'll add them later if needed
+            const itemsToInsert = knowledgeItems.map(item => ({
                 ...item,
-                embedding,
+                embedding: [], // Empty array for now
                 createdAt: new Date(),
-            });
+            }));
+            await collection.insertMany(itemsToInsert);
+            console.log(`Initialized assessment knowledge base with ${knowledgeItems.length} items (without embeddings)`);
+            // Try to add embeddings in the background (non-blocking)
+            setTimeout(async () => {
+                try {
+                    console.log('🔄 Adding embeddings to knowledge base in background...');
+                    for (const item of knowledgeItems) {
+                        try {
+                            const embedding = await this.embeddings.embedQuery(item.content);
+                            await collection.updateOne({ id: item.id }, { $set: { embedding } });
+                        }
+                        catch (embeddingError) {
+                            console.error(`Failed to create embedding for item: ${item.content.substring(0, 50)}...`, embeddingError);
+                            continue;
+                        }
+                    }
+                    console.log('✅ Embeddings added successfully');
+                }
+                catch (error) {
+                    console.error('Failed to add embeddings:', error);
+                }
+            }, 2000);
         }
-        console.log(`Initialized assessment knowledge base with ${knowledgeItems.length} items`);
+        catch (error) {
+            console.error('Failed to initialize assessment knowledge base:', error);
+            // Don't throw - let the server continue without embeddings
+        }
     }
     /**
      * Search for relevant assessment knowledge based on user query
      */
     async searchAssessmentKnowledge(query, topK = 3) {
-        const collection = this.db.collection('AssessmentKnowledge');
-        const queryVector = await this.embeddings.embedQuery(query);
-        const results = await collection
-            .aggregate([
-            {
-                $vectorSearch: {
-                    index: 'assessment_knowledge_index',
-                    path: 'embedding',
-                    queryVector,
-                    limit: topK,
-                    numCandidates: topK * 10
-                }
-            },
-            {
-                $project: {
-                    id: 1,
-                    type: 1,
-                    assessment_name: 1,
-                    content: 1,
-                    metadata: 1,
-                    score: { $meta: 'vectorSearchScore' },
-                },
-            },
-        ])
-            .toArray();
-        return results.map(doc => ({
-            id: doc.id,
-            type: doc.type,
-            assessment_name: doc.assessment_name,
-            content: doc.content,
-            embedding: [], // Not needed in response
-            metadata: doc.metadata,
-            score: doc.score, // Include the similarity score
-            createdAt: new Date(),
-        }));
+        try {
+            const collection = this.db.collection('AssessmentKnowledge');
+            // Use simple text search as primary method (more reliable)
+            const results = await collection
+                .find({
+                $or: [
+                    { content: { $regex: query, $options: 'i' } },
+                    { 'metadata.tags': { $in: query.toLowerCase().split(' ') } },
+                    { 'metadata.category': { $regex: query, $options: 'i' } },
+                    { assessment_name: { $regex: query, $options: 'i' } }
+                ]
+            })
+                .limit(topK)
+                .toArray();
+            if (results.length > 0) {
+                return results.map(doc => ({
+                    id: doc.id,
+                    type: doc.type,
+                    assessment_name: doc.assessment_name,
+                    content: doc.content,
+                    embedding: [], // Not needed in response
+                    metadata: doc.metadata,
+                    score: 0.8, // Default score for text search
+                    createdAt: new Date(),
+                }));
+            }
+            // Fallback: try vector search if available and no text results
+            try {
+                const queryVector = await this.embeddings.embedQuery(query);
+                const vectorResults = await collection
+                    .aggregate([
+                    {
+                        $vectorSearch: {
+                            index: 'assessment_knowledge_index',
+                            path: 'embedding',
+                            queryVector,
+                            limit: topK,
+                            numCandidates: topK * 10
+                        }
+                    },
+                    {
+                        $project: {
+                            id: 1,
+                            type: 1,
+                            assessment_name: 1,
+                            content: 1,
+                            metadata: 1,
+                            score: { $meta: 'vectorSearchScore' },
+                        },
+                    },
+                ])
+                    .toArray();
+                return vectorResults.map(doc => ({
+                    id: doc.id,
+                    type: doc.type,
+                    assessment_name: doc.assessment_name,
+                    content: doc.content,
+                    embedding: [], // Not needed in response
+                    metadata: doc.metadata,
+                    score: doc.score, // Include the similarity score
+                    createdAt: new Date(),
+                }));
+            }
+            catch (vectorSearchError) {
+                console.log('Vector search not available, using text search only');
+                return [];
+            }
+        }
+        catch (error) {
+            console.error('Error searching assessment knowledge:', error);
+            // Return empty array on error to prevent crashes
+            return [];
+        }
     }
     /**
      * Generate predefined knowledge items for assessments
@@ -187,35 +251,45 @@ export class AssessmentEmbeddingService {
      * Get assessment suggestions based on user query
      */
     async getAssessmentSuggestions(userQuery) {
-        const relevantKnowledge = await this.searchAssessmentKnowledge(userQuery, 5);
-        if (relevantKnowledge.length === 0) {
+        try {
+            const relevantKnowledge = await this.searchAssessmentKnowledge(userQuery, 5);
+            if (relevantKnowledge.length === 0) {
+                console.log('No relevant knowledge found for query:', userQuery);
+                return [];
+            }
+            // Group by assessment and calculate confidence using actual similarity scores
+            const assessmentScores = {};
+            for (const item of relevantKnowledge) {
+                if (item.assessment_name) {
+                    if (!assessmentScores[item.assessment_name]) {
+                        assessmentScores[item.assessment_name] = { totalScore: 0, count: 0, reasons: [] };
+                    }
+                    // Use the similarity score from vector search (assuming it's available in metadata)
+                    const similarityScore = typeof item.score === 'number' ? item.score : null;
+                    if (similarityScore === null)
+                        continue;
+                    assessmentScores[item.assessment_name].totalScore += similarityScore;
+                    assessmentScores[item.assessment_name].count += 1;
+                    assessmentScores[item.assessment_name].reasons.push(item.content);
+                }
+            }
+            // Convert to suggestions with proper confidence calculation
+            const suggestions = Object.entries(assessmentScores)
+                .map(([assessment, data]) => ({
+                suggestedAssessment: assessment,
+                confidence: data.totalScore / data.count, // Average similarity score
+                reasoning: data.reasons.slice(0, 2).join('\n\n') || 'Relevant to your business needs'
+            }))
+                .filter(suggestion => suggestion.confidence > 0.5) // Higher threshold for relevance
+                .sort((a, b) => b.confidence - a.confidence)
+                .slice(0, 3);
+            console.log(`Found ${suggestions.length} assessment suggestions for query: "${userQuery}"`);
+            return suggestions;
+        }
+        catch (error) {
+            console.error('Error getting assessment suggestions:', error);
             return [];
         }
-        // Group by assessment and calculate confidence using actual similarity scores
-        const assessmentScores = {};
-        for (const item of relevantKnowledge) {
-            if (item.assessment_name) {
-                if (!assessmentScores[item.assessment_name]) {
-                    assessmentScores[item.assessment_name] = { totalScore: 0, count: 0, reasons: [] };
-                }
-                // Use the similarity score from vector search (assuming it's available in metadata)
-                const similarityScore = item.score || 0.5; // Fallback if score not available
-                assessmentScores[item.assessment_name].totalScore += similarityScore;
-                assessmentScores[item.assessment_name].count += 1;
-                assessmentScores[item.assessment_name].reasons.push(item.content);
-            }
-        }
-        // Convert to suggestions with proper confidence calculation
-        const suggestions = Object.entries(assessmentScores)
-            .map(([assessment, data]) => ({
-            suggestedAssessment: assessment,
-            confidence: data.totalScore / data.count, // Average similarity score
-            reasoning: data.reasons[0] || 'Relevant to your business needs'
-        }))
-            .filter(suggestion => suggestion.confidence > 0.7) // Higher threshold for relevance
-            .sort((a, b) => b.confidence - a.confidence)
-            .slice(0, 3);
-        return suggestions;
     }
 }
 //# sourceMappingURL=assessmentEmbeddingService.js.map

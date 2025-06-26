@@ -136,54 +136,88 @@ export class AssessmentRagService {
      * Process user message and determine if it's an assessment-related request
      */
     async processMessage(userId, userMessage) {
-        console.log(`🔍 Processing message: "${userMessage}" for user: ${userId}`);
-        // Get user profile to check current assessment status
-        const user = await this.db.collection("user_profiles").findOne({ _id: userId });
-        const currentAssessment = user?.progress?.currentAssessment;
-        const currentStepIndex = user?.progress?.stepIndex || 0;
-        console.log(`📊 User assessment status: current=${currentAssessment}, step=${currentStepIndex}`);
-        // If user is in the middle of an assessment, process their answer
-        if (currentAssessment && currentStepIndex > 0) {
-            console.log(`🔄 User is in assessment: ${currentAssessment}, processing answer`);
+        try {
+            console.log(`🔍 Processing message: "${userMessage}" for user: ${userId}`);
+            // Get user profile to check current assessment status
+            const user = await this.db.collection("user_profiles").findOne({ _id: userId });
+            const currentAssessment = user?.progress?.currentAssessment;
+            const currentStepIndex = user?.progress?.stepIndex || 0;
+            console.log(`📊 User assessment status: current=${currentAssessment}, step=${currentStepIndex}`);
+            // If user is in the middle of an assessment, process their answer or handle step 0 fallback
+            if (currentAssessment && currentStepIndex >= 0) {
+                // Step 0 handler fallback
+                if (currentStepIndex === 0) {
+                    console.log(`⚡ Triggering step 0 prompt for assessment: ${currentAssessment}`);
+                    const result = await this.assessmentService.startAssessment(currentAssessment, userId);
+                    return {
+                        isAssessmentRequest: true,
+                        action: 'start_assessment',
+                        assessmentName: currentAssessment,
+                        response: result.currentStep?.goal_prompt
+                    };
+                }
+                console.log(`🔄 User is in assessment: ${currentAssessment}, processing answer`);
+                return {
+                    isAssessmentRequest: true,
+                    action: 'process_answer',
+                    input: userMessage,
+                    response: await this.processAssessmentAnswer(userId, userMessage, currentAssessment)
+                };
+            }
+            // Check if user is confirming an assessment suggestion
+            const lastConversation = user?.progress?.lastAssessmentSuggestion;
+            if (lastConversation && this.isConfirmation(userMessage)) {
+                console.log(`✅ User confirmed assessment suggestion: ${lastConversation}`);
+                const response = await this.startAssessment(userId, lastConversation);
+                await this.db.collection("user_profiles").updateOne({ _id: userId }, { $unset: { "progress.lastAssessmentSuggestion": "" } });
+                return {
+                    isAssessmentRequest: true,
+                    action: 'start_assessment',
+                    assessmentName: lastConversation,
+                    response
+                };
+            }
+            // Check if user wants to start an assessment using RAG
+            console.log(`🤖 Checking for assessment intent using RAG...`);
+            const assessmentIntent = await this.detectAssessmentIntentWithRag(userMessage);
+            if (assessmentIntent) {
+                console.log(`🎯 Assessment intent detected: ${assessmentIntent}`);
+                // Store the suggested assessment for confirmation
+                await this.db.collection("user_profiles").updateOne({ _id: userId }, { $set: { "progress.lastAssessmentSuggestion": assessmentIntent } });
+                // Return assessment suggestion - let AI handle the conversation
+                return {
+                    isAssessmentRequest: true,
+                    action: 'suggest_assessment',
+                    assessmentName: assessmentIntent,
+                    response: undefined // Let AI handle the conversation
+                };
+            }
+            // Check for direct assessment requests (fallback)
+            const directAssessment = this.detectDirectAssessmentRequest(userMessage);
+            if (directAssessment) {
+                console.log(`🎯 Direct assessment request detected: ${directAssessment}`);
+                return {
+                    isAssessmentRequest: true,
+                    action: 'start_assessment',
+                    assessmentName: directAssessment,
+                    response: await this.startAssessment(userId, directAssessment)
+                };
+            }
+            console.log(`💬 No assessment intent detected, treating as general query`);
+            // General query
             return {
-                isAssessmentRequest: true,
-                action: 'process_answer',
-                input: userMessage,
-                response: await this.processAssessmentAnswer(userId, userMessage, currentAssessment)
+                isAssessmentRequest: false,
+                action: 'general_query'
             };
         }
-        // Check if user is confirming an assessment suggestion
-        const lastConversation = user?.progress?.lastAssessmentSuggestion;
-        if (lastConversation && this.isConfirmation(userMessage)) {
-            console.log(`✅ User confirmed assessment suggestion: ${lastConversation}`);
+        catch (error) {
+            console.error('❌ Error in assessment RAG service:', error);
+            // Return general query on error
             return {
-                isAssessmentRequest: true,
-                action: 'start_assessment',
-                assessmentName: lastConversation,
-                response: await this.startAssessment(userId, lastConversation)
+                isAssessmentRequest: false,
+                action: 'general_query'
             };
         }
-        // Check if user wants to start an assessment using RAG
-        console.log(`🤖 Checking for assessment intent using RAG...`);
-        const assessmentIntent = await this.detectAssessmentIntentWithRag(userMessage);
-        if (assessmentIntent) {
-            console.log(`🎯 Assessment intent detected: ${assessmentIntent}`);
-            // Store the suggested assessment for confirmation
-            await this.db.collection("user_profiles").updateOne({ _id: userId }, { $set: { "progress.lastAssessmentSuggestion": assessmentIntent } });
-            // Return assessment suggestion without hardcoded text - let AI handle conversation
-            return {
-                isAssessmentRequest: true,
-                action: 'suggest_assessment',
-                assessmentName: assessmentIntent,
-                response: undefined // Let AI handle the conversation
-            };
-        }
-        console.log(`💬 No assessment intent detected, treating as general query`);
-        // General query
-        return {
-            isAssessmentRequest: false,
-            action: 'general_query'
-        };
     }
     /**
      * Check if user message is a confirmation
@@ -305,6 +339,57 @@ export class AssessmentRagService {
      */
     getAvailableAssessments() {
         return this.assessmentDefinitions;
+    }
+    /**
+     * Detect direct assessment requests by name
+     */
+    detectDirectAssessmentRequest(userMessage) {
+        const lowerMessage = userMessage.toLowerCase();
+        // Map common terms to assessment names
+        const assessmentMap = {
+            'simular lucro': 'simulateProfit',
+            'simulação de lucro': 'simulateProfit',
+            'lucro': 'simulateProfit',
+            'profit': 'simulateProfit',
+            'profit simulation': 'simulateProfit',
+            'radar de saúde financeira': 'financialHealthRadar',
+            'saúde financeira': 'financialHealthRadar',
+            'financial health': 'financialHealthRadar',
+            'financial health radar': 'financialHealthRadar',
+            'teste de independência operacional': 'operationalIndependenceTest',
+            'independência operacional': 'operationalIndependenceTest',
+            'operational independence': 'operationalIndependenceTest',
+            'scanner de ferramentas': 'toolScanner',
+            'ferramentas': 'toolScanner',
+            'tools': 'toolScanner',
+            'tool scanner': 'toolScanner',
+            'termômetro de padronização': 'standardizationThermometer',
+            'padronização': 'standardizationThermometer',
+            'standardization': 'standardizationThermometer',
+            'painel de fidelização': 'customerLoyaltyPanel',
+            'fidelização': 'customerLoyaltyPanel',
+            'loyalty': 'customerLoyaltyPanel',
+            'customer loyalty': 'customerLoyaltyPanel',
+            'mapa de aquisição': 'customerAcquisitionMap',
+            'aquisição': 'customerAcquisitionMap',
+            'acquisition': 'customerAcquisitionMap',
+            'scanner de estratégia': 'marketStrategyScanner',
+            'estratégia': 'marketStrategyScanner',
+            'strategy': 'marketStrategyScanner',
+            'raio-x organizacional': 'organizationalXray',
+            'organização': 'organizationalXray',
+            'organization': 'organizationalXray',
+            'diagnóstico de contexto': 'contextDiagnosis',
+            'contexto': 'contextDiagnosis',
+            'context': 'contextDiagnosis',
+            'diagnosis': 'contextDiagnosis'
+        };
+        for (const [term, assessment] of Object.entries(assessmentMap)) {
+            if (lowerMessage.includes(term)) {
+                return assessment;
+            }
+        }
+        return null;
     }
 }
 //# sourceMappingURL=assessmentRagService.js.map

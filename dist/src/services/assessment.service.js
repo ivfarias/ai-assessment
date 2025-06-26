@@ -145,6 +145,14 @@ export class AssessmentService {
             };
             await this.db.collection("user_profiles").insertOne(user);
         }
+        // Guard: If already in progress for this assessment, return in_progress status
+        if (user?.progress?.currentAssessment === assessmentName) {
+            return {
+                status: 'in_progress',
+                currentStep: assessment.steps[user.progress.stepIndex || 0],
+                progress: { current: user.progress.stepIndex || 0, total: assessment.steps.length }
+            };
+        }
         // Start the assessment
         const progress = {
             currentAssessment: assessmentName,

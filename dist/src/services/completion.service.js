@@ -30,27 +30,11 @@ export default class CompletionService {
         if (query) {
             // Determine if this is a simple greeting to reduce context
             const isSimpleGreeting = this.isSimpleGreeting(query);
-            const isAssessmentQuery = this.isAssessmentRelatedQuery(query);
             let content;
             if (isSimpleGreeting) {
-                // For simple greetings, provide minimal context
                 content = `User Query: "${query}"`;
             }
-            else if (isAssessmentQuery) {
-                // For assessment queries, focus on assessment context
-                content = [
-                    `User Query: "${query}"`,
-                    `User Profile Context: ${JSON.stringify(context, null, 2)}`,
-                    '',
-                    'Conversation Summary:',
-                    historySummary,
-                    '',
-                    'Relevant business context:',
-                    vectorContext,
-                ].join('\n');
-            }
             else {
-                // For other queries, provide full context
                 content = [
                     `User Query: "${query}"`,
                     `User Profile Context: ${JSON.stringify(context, null, 2)}`,
@@ -113,8 +97,15 @@ export default class CompletionService {
         return messages.map(message => {
             // If it's already in OpenAI format, check if it's a tool message first
             if (message.role) {
-                // Skip tool messages immediately
+                // Keep assessment-related tool messages
                 if (message.role === 'tool') {
+                    if (message.content?.includes('"current_step_goal"') ||
+                        message.content?.includes('"goal_prompt"') ||
+                        message.content?.includes('assessment') ||
+                        message.content?.includes('step')) {
+                        return message;
+                    }
+                    // Skip other tool messages
                     return null;
                 }
                 // Return other messages as-is
@@ -135,7 +126,14 @@ export default class CompletionService {
                     return { role: 'system', content: message.content };
                 }
                 else if (type === 'tool') {
-                    // Skip tool messages
+                    // Check if it's an assessment-related tool message
+                    if (message.content?.includes('"current_step_goal"') ||
+                        message.content?.includes('"goal_prompt"') ||
+                        message.content?.includes('assessment') ||
+                        message.content?.includes('step')) {
+                        return { role: 'tool', content: message.content };
+                    }
+                    // Skip other tool messages
                     return null;
                 }
             }
@@ -153,23 +151,93 @@ export default class CompletionService {
      */
     async handleAssessmentSuggestion(args) {
         const { user_id, user_query } = args;
-        // Use RAG to get intelligent assessment suggestions
-        const suggestions = await this.assessmentRagService.embeddingService.getAssessmentSuggestions(user_query);
-        if (suggestions.length === 0) {
+        try {
+            // Use RAG to get intelligent assessment suggestions
+            const suggestions = await this.assessmentRagService.embeddingService.getAssessmentSuggestions(user_query);
+            if (suggestions.length === 0) {
+                return 'Desculpe, não consegui identificar uma análise adequada para sua situação. Pode me contar mais sobre o que você gostaria de melhorar no seu negócio?';
+            }
+            const bestSuggestion = suggestions[0];
+            const assessmentDefinitions = this.assessmentRagService.getAvailableAssessments();
+            const assessment = assessmentDefinitions.find(a => a.name === bestSuggestion.suggestedAssessment);
+            if (!assessment) {
+                return 'Desculpe, não consegui identificar uma análise adequada para sua situação.';
+            }
+            let message = `💡 Baseado na sua pergunta sobre "${user_query}", sugiro a análise: **${assessment.name}**\n\n`;
+            message += `📋 **O que esta análise faz:**\n${assessment.description}\n\n`;
+            message += `🤔 **Por que seria útil:** ${bestSuggestion.reasoning}\n\n`;
+            message += `✅ **Gostaria de começar esta análise agora?**\n`;
+            message += `Responda "sim" para iniciar ou me diga se prefere outra abordagem.`;
+            return message;
+        }
+        catch (error) {
+            console.error('Error in assessment suggestion:', error);
+            // Fallback to direct assessment detection
+            const directAssessment = this.detectDirectAssessmentRequest(user_query);
+            if (directAssessment) {
+                const assessmentDefinitions = this.assessmentRagService.getAvailableAssessments();
+                const assessment = assessmentDefinitions.find(a => a.name === directAssessment);
+                if (assessment) {
+                    let message = `💡 Baseado na sua pergunta, sugiro a análise: **${assessment.name}**\n\n`;
+                    message += `📋 **O que esta análise faz:**\n${assessment.description}\n\n`;
+                    message += `✅ **Gostaria de começar esta análise agora?**\n`;
+                    message += `Responda "sim" para iniciar ou me diga se prefere outra abordagem.`;
+                    return message;
+                }
+            }
             return 'Desculpe, não consegui identificar uma análise adequada para sua situação. Pode me contar mais sobre o que você gostaria de melhorar no seu negócio?';
         }
-        const bestSuggestion = suggestions[0];
-        const assessmentDefinitions = this.assessmentRagService.getAvailableAssessments();
-        const assessment = assessmentDefinitions.find(a => a.name === bestSuggestion.suggestedAssessment);
-        if (!assessment) {
-            return 'Desculpe, não consegui identificar uma análise adequada para sua situação.';
+    }
+    /**
+     * Detect direct assessment requests by name (fallback method)
+     */
+    detectDirectAssessmentRequest(userQuery) {
+        const lowerQuery = userQuery.toLowerCase();
+        // Map common terms to assessment names
+        const assessmentMap = {
+            'simular lucro': 'simulateProfit',
+            'simulação de lucro': 'simulateProfit',
+            'lucro': 'simulateProfit',
+            'profit': 'simulateProfit',
+            'profit simulation': 'simulateProfit',
+            'radar de saúde financeira': 'financialHealthRadar',
+            'saúde financeira': 'financialHealthRadar',
+            'financial health': 'financialHealthRadar',
+            'financial health radar': 'financialHealthRadar',
+            'teste de independência operacional': 'operationalIndependenceTest',
+            'independência operacional': 'operationalIndependenceTest',
+            'operational independence': 'operationalIndependenceTest',
+            'scanner de ferramentas': 'toolScanner',
+            'ferramentas': 'toolScanner',
+            'tools': 'toolScanner',
+            'tool scanner': 'toolScanner',
+            'termômetro de padronização': 'standardizationThermometer',
+            'padronização': 'standardizationThermometer',
+            'standardization': 'standardizationThermometer',
+            'painel de fidelização': 'customerLoyaltyPanel',
+            'fidelização': 'customerLoyaltyPanel',
+            'loyalty': 'customerLoyaltyPanel',
+            'customer loyalty': 'customerLoyaltyPanel',
+            'mapa de aquisição': 'customerAcquisitionMap',
+            'aquisição': 'customerAcquisitionMap',
+            'acquisition': 'customerAcquisitionMap',
+            'scanner de estratégia': 'marketStrategyScanner',
+            'estratégia': 'marketStrategyScanner',
+            'strategy': 'marketStrategyScanner',
+            'raio-x organizacional': 'organizationalXray',
+            'organização': 'organizationalXray',
+            'organization': 'organizationalXray',
+            'diagnóstico de contexto': 'contextDiagnosis',
+            'contexto': 'contextDiagnosis',
+            'context': 'contextDiagnosis',
+            'diagnosis': 'contextDiagnosis'
+        };
+        for (const [term, assessment] of Object.entries(assessmentMap)) {
+            if (lowerQuery.includes(term)) {
+                return assessment;
+            }
         }
-        let message = `💡 Baseado na sua pergunta sobre "${user_query}", sugiro a análise: **${assessment.name}**\n\n`;
-        message += `📋 **O que esta análise faz:**\n${assessment.description}\n\n`;
-        message += `🤔 **Por que seria útil:** ${bestSuggestion.reasoning}\n\n`;
-        message += `✅ **Gostaria de começar esta análise agora?**\n`;
-        message += `Responda "sim" para iniciar ou me diga se prefere outra abordagem.`;
-        return message;
+        return null;
     }
     /**
      * Handle starting an assessment using the AssessmentService directly
