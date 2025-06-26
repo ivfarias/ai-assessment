@@ -18,10 +18,22 @@ interface GetStatusRequest {
 }
 
 export class AssessmentController {
-  private assessmentService: AssessmentService;
+  private assessmentService: AssessmentService | null = null;
 
-  constructor() {
-    this.assessmentService = new AssessmentService(getDb());
+  private getAssessmentService(): AssessmentService {
+    if (!this.assessmentService) {
+      try {
+        const db = getDb();
+        if (!db) {
+          throw new Error('Database not available');
+        }
+        this.assessmentService = new AssessmentService(db);
+      } catch (error) {
+        console.error('Failed to initialize AssessmentService:', error);
+        throw new Error('Assessment service not available');
+      }
+    }
+    return this.assessmentService;
   }
 
   async startAssessment(request: FastifyRequest<StartAssessmentRequest>, reply: FastifyReply) {
@@ -31,7 +43,8 @@ export class AssessmentController {
 
       console.log(`Starting assessment: ${name} for user: ${userId}`);
 
-      const result = await this.assessmentService.startAssessment(name, userId, context);
+      const assessmentService = this.getAssessmentService();
+      const result = await assessmentService.startAssessment(name, userId, context);
 
       return reply.status(200).send({
         status: 'started',
@@ -50,6 +63,13 @@ export class AssessmentController {
         });
       }
 
+      if (error.message.includes('Assessment service not available') || error.message.includes('Database not available')) {
+        return reply.status(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Assessment service is temporarily unavailable'
+        });
+      }
+
       return reply.status(500).send({
         error: 'INTERNAL_ERROR',
         message: 'Failed to start assessment'
@@ -64,7 +84,8 @@ export class AssessmentController {
 
       console.log(`Processing answer for assessment: ${name}, user: ${userId}, step: ${stepKey}`);
 
-      const result = await this.assessmentService.processAnswer(name, userId, answer, stepKey);
+      const assessmentService = this.getAssessmentService();
+      const result = await assessmentService.processAnswer(name, userId, answer, stepKey);
 
       if (result.status === 'completed') {
         return reply.status(200).send({
@@ -100,6 +121,13 @@ export class AssessmentController {
         });
       }
 
+      if (error.message.includes('Assessment service not available') || error.message.includes('Database not available')) {
+        return reply.status(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Assessment service is temporarily unavailable'
+        });
+      }
+
       return reply.status(500).send({
         error: 'INTERNAL_ERROR',
         message: 'Failed to process assessment answer'
@@ -114,7 +142,8 @@ export class AssessmentController {
 
       console.log(`Getting status for assessment: ${name}, user: ${userId}`);
 
-      const result = await this.assessmentService.getStatus(name, userId);
+      const assessmentService = this.getAssessmentService();
+      const result = await assessmentService.getStatus(name, userId);
 
       return reply.status(200).send({
         status: result.status,
@@ -134,6 +163,13 @@ export class AssessmentController {
         });
       }
 
+      if (error.message.includes('Assessment service not available') || error.message.includes('Database not available')) {
+        return reply.status(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Assessment service is temporarily unavailable'
+        });
+      }
+
       return reply.status(500).send({
         error: 'INTERNAL_ERROR',
         message: 'Failed to get assessment status'
@@ -145,7 +181,8 @@ export class AssessmentController {
     try {
       console.log('Listing available assessments');
 
-      const assessments = await this.assessmentService.listAssessments();
+      const assessmentService = this.getAssessmentService();
+      const assessments = await assessmentService.listAssessments();
 
       return reply.status(200).send({
         assessments
@@ -154,6 +191,13 @@ export class AssessmentController {
     } catch (error: any) {
       console.error('Error listing assessments:', error);
       
+      if (error.message.includes('Assessment service not available') || error.message.includes('Database not available')) {
+        return reply.status(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Assessment service is temporarily unavailable'
+        });
+      }
+
       return reply.status(500).send({
         error: 'INTERNAL_ERROR',
         message: 'Failed to list assessments'
