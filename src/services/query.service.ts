@@ -74,7 +74,7 @@ export default class QueryService {
       console.log(`📊 User assessment status:`, assessmentStatus);
 
       // If user is in the middle of an assessment, process their answer
-      if (assessmentStatus.currentAssessment && assessmentStatus.stepIndex > 0) {
+      if (assessmentStatus.currentAssessment && assessmentStatus.stepIndex >= 0) {
         console.log(`🔄 User is in assessment: ${assessmentStatus.currentAssessment}, processing answer`);
         const result = await this.assessmentRagService.processAssessmentAnswer(options.userId, query);
         

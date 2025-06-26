@@ -23,9 +23,9 @@ export class AssessmentService {
                 description: "Analyzes business profitability by calculating revenue, costs, and profit margins",
                 category: "finance",
                 steps: [
-                    { key: "faturamentoMensal", goal_prompt: "What is your current monthly revenue? This helps us understand your business size and growth potential." },
-                    { key: "custoProdutos", goal_prompt: "What is the approximate cost of your products or services (COGS)? This helps calculate your gross margin." },
-                    { key: "percentualReinvestido", goal_prompt: "What percentage of your revenue do you reinvest back into the business? This shows your commitment to growth." }
+                    { key: "faturamentoMensal", goal_prompt: "Qual é sua receita mensal atual? Isso nos ajuda a entender o tamanho do seu negócio e potencial de crescimento." },
+                    { key: "custoProdutos", goal_prompt: "Qual é o custo aproximado dos seus produtos ou serviços (CPV)? Isso ajuda a calcular sua margem bruta." },
+                    { key: "percentualReinvestido", goal_prompt: "Que porcentagem da sua receita você reinveste no negócio? Isso mostra seu compromisso com o crescimento." }
                 ]
             },
             financialHealthRadar: {
@@ -34,8 +34,8 @@ export class AssessmentService {
                 description: "Evaluates financial stability through revenue predictability and cash flow management",
                 category: "finance",
                 steps: [
-                    { key: "previsibilidadeScore", goal_prompt: "On a scale of 1 to 5, how well can you predict next month's revenue? Predictability is a sign of a stable business." },
-                    { key: "caixaScore", goal_prompt: "On a scale of 1 to 5, how often do you run out of money to replenish stock? This measures your cash flow health." }
+                    { key: "previsibilidadeScore", goal_prompt: "Em uma escala de 1 a 5, quão bem você consegue prever a receita do próximo mês? Previsibilidade é um sinal de um negócio estável." },
+                    { key: "caixaScore", goal_prompt: "Em uma escala de 1 a 5, com que frequência você fica sem dinheiro para repor o estoque? Isso mede a saúde do seu fluxo de caixa." }
                 ]
             },
             operationalIndependenceTest: {
@@ -44,9 +44,9 @@ export class AssessmentService {
                 description: "Measures how dependent the business is on the owner and identifies automation opportunities",
                 category: "operations",
                 steps: [
-                    { key: "horasSemana", goal_prompt: "How many hours per week do you dedicate to the business? This helps understand your level of involvement." },
-                    { key: "processosDocumentados", goal_prompt: "Do you have written processes or routines? This indicates business maturity." },
-                    { key: "dependenciaDoDonoScore", goal_prompt: "On a scale of 1 to 5, how replaceable are you in day-to-day operations? This measures owner dependency." }
+                    { key: "horasSemana", goal_prompt: "Quantas horas por semana você dedica ao negócio? Isso ajuda a entender seu nível de envolvimento." },
+                    { key: "processosDocumentados", goal_prompt: "Você tem processos ou rotinas escritas? Isso indica maturidade do negócio." },
+                    { key: "dependenciaDoDonoScore", goal_prompt: "Em uma escala de 1 a 5, quão substituível você é nas operações do dia a dia? Isso mede a dependência do proprietário." }
                 ]
             },
             toolScanner: {
@@ -55,8 +55,8 @@ export class AssessmentService {
                 description: "Analyzes current tools and technology stack for digital transformation opportunities",
                 category: "technology",
                 steps: [
-                    { key: "ferramentasUsadas", goal_prompt: "What tools do you use for management (e.g., notebook, spreadsheets, app)? This helps understand your current tech stack." },
-                    { key: "canaisComunicacao", goal_prompt: "What channels do you use to communicate with customers (e.g., WhatsApp, Instagram)? This reveals your customer engagement strategy." }
+                    { key: "ferramentasUsadas", goal_prompt: "Que ferramentas você usa para gestão (ex: caderno, planilhas, aplicativo)? Isso ajuda a entender sua stack tecnológica atual." },
+                    { key: "canaisComunicacao", goal_prompt: "Que canais você usa para se comunicar com clientes (ex: WhatsApp, Instagram)? Isso revela sua estratégia de engajamento com clientes." }
                 ]
             },
             standardizationThermometer: {
@@ -65,7 +65,7 @@ export class AssessmentService {
                 description: "Evaluates product/service consistency and quality standards",
                 category: "operations",
                 steps: [
-                    { key: "consistenciaScore", goal_prompt: "On a scale of 1 to 5, do your products/services always follow the same quality standard? This measures consistency." }
+                    { key: "consistenciaScore", goal_prompt: "Em uma escala de 1 a 5, seus produtos/serviços sempre seguem o mesmo padrão de qualidade? Isso mede a consistência." }
                 ]
             },
             customerLoyaltyPanel: {
@@ -74,10 +74,10 @@ export class AssessmentService {
                 description: "Analyzes customer retention and loyalty metrics",
                 category: "customers",
                 steps: [
-                    { key: "baseAtiva", goal_prompt: "What is the approximate number of active customers? This shows the size of your customer base." },
-                    { key: "frequenciaCompra", goal_prompt: "How often do your customers buy from you? This measures purchase frequency." },
-                    { key: "ticketMedio", goal_prompt: "What is your average ticket per sale? This is a key revenue metric." },
-                    { key: "fidelizacaoPercent", goal_prompt: "What is the approximate percentage of customers who return to buy again? This indicates customer loyalty." }
+                    { key: "baseAtiva", goal_prompt: "Qual é o número aproximado de clientes ativos? Isso mostra o tamanho da sua base de clientes." },
+                    { key: "frequenciaCompra", goal_prompt: "Com que frequência seus clientes compram de você? Isso mede a frequência de compra." },
+                    { key: "ticketMedio", goal_prompt: "Qual é seu ticket médio por venda? Esta é uma métrica chave de receita." },
+                    { key: "fidelizacaoPercent", goal_prompt: "Qual é a porcentagem aproximada de clientes que retornam para comprar novamente? Isso indica a fidelização de clientes." }
                 ]
             },
             customerAcquisitionMap: {
@@ -86,7 +86,7 @@ export class AssessmentService {
                 description: "Maps customer acquisition channels and strategies",
                 category: "marketing",
                 steps: [
-                    { key: "canais", goal_prompt: "How do you get new customers today (e.g., referrals, social media)? This maps out your acquisition channels." }
+                    { key: "canais", goal_prompt: "Como você consegue novos clientes hoje (ex: indicações, redes sociais)? Isso mapeia seus canais de aquisição." }
                 ]
             },
             marketStrategyScanner: {
@@ -95,10 +95,10 @@ export class AssessmentService {
                 description: "Evaluates competitive positioning and strategic planning",
                 category: "strategy",
                 steps: [
-                    { key: "diferencial", goal_prompt: "How do you differentiate yourself from the competition? This reveals your unique value proposition." },
-                    { key: "planosScore", goal_prompt: "On a scale of 1 to 5, how clear are your plans for the next 12 months? This measures strategic clarity." },
-                    { key: "concorrenciaScore", goal_prompt: "On a scale of 1 to 5, how well do you know and monitor your competitors? This assesses market awareness." },
-                    { key: "novosProdutosScore", goal_prompt: "On a scale of 1 to 5, how often do you launch new products or services? This indicates innovation rate." }
+                    { key: "diferencial", goal_prompt: "Como você se diferencia da concorrência? Isso revela sua proposta de valor única." },
+                    { key: "planosScore", goal_prompt: "Em uma escala de 1 a 5, quão claros são seus planos para os próximos 12 meses? Isso mede a clareza estratégica." },
+                    { key: "concorrenciaScore", goal_prompt: "Em uma escala de 1 a 5, quão bem você conhece e monitora seus concorrentes? Isso avalia a consciência de mercado." },
+                    { key: "novosProdutosScore", goal_prompt: "Em uma escala de 1 a 5, com que frequência você lança novos produtos ou serviços? Isso indica a taxa de inovação." }
                 ]
             },
             organizationalXray: {
@@ -107,9 +107,9 @@ export class AssessmentService {
                 description: "Analyzes team structure, responsibilities, and company culture",
                 category: "organization",
                 steps: [
-                    { key: "equipe", goal_prompt: "How many people work in your business, including yourself? This determines team size." },
-                    { key: "divisaoResponsabilidadesScore", goal_prompt: "On a scale of 1 to 5, how clear is the division of responsibilities? This assesses organizational structure." },
-                    { key: "culturaScore", goal_prompt: "On a scale of 1 to 5, how would you describe the culture or values of your business? This gives insight into your company's identity." }
+                    { key: "equipe", goal_prompt: "Quantas pessoas trabalham no seu negócio, incluindo você? Isso determina o tamanho da equipe." },
+                    { key: "divisaoResponsabilidadesScore", goal_prompt: "Em uma escala de 1 a 5, quão clara é a divisão de responsabilidades? Isso avalia a estrutura organizacional." },
+                    { key: "culturaScore", goal_prompt: "Em uma escala de 1 a 5, como você descreveria a cultura ou valores do seu negócio? Isso dá insight sobre a identidade da sua empresa." }
                 ]
             },
             contextDiagnosis: {
@@ -119,11 +119,11 @@ export class AssessmentService {
                 category: "overview",
                 finalAssessment: true,
                 steps: [
-                    { key: "tempoNegocio", goal_prompt: "How long have you been working on this business? This provides historical context." },
-                    { key: "canalPrincipal", goal_prompt: "What is your main sales channel today? This identifies your primary revenue stream." },
-                    { key: "objetivoNegocio", goal_prompt: "What is your main goal with the business? This clarifies your long-term vision." },
-                    { key: "desafioAtual", goal_prompt: "What is your biggest current challenge? This helps in providing targeted advice." },
-                    { key: "objetivo6Meses", goal_prompt: "What would you like to achieve in the next 6 months? This sets a short-term goal." }
+                    { key: "tempoNegocio", goal_prompt: "Há quanto tempo você trabalha neste negócio? Isso fornece contexto histórico." },
+                    { key: "canalPrincipal", goal_prompt: "Qual é seu principal canal de vendas hoje? Isso identifica sua principal fonte de receita." },
+                    { key: "objetivoNegocio", goal_prompt: "Qual é seu principal objetivo com o negócio? Isso esclarece sua visão de longo prazo." },
+                    { key: "desafioAtual", goal_prompt: "Qual é seu maior desafio atual? Isso ajuda a fornecer conselhos direcionados." },
+                    { key: "objetivo6Meses", goal_prompt: "O que você gostaria de alcançar nos próximos 6 meses? Isso define uma meta de curto prazo." }
                 ]
             }
         };
@@ -182,15 +182,12 @@ export class AssessmentService {
         // Determine which step to process
         let targetStepKey = stepKey;
         if (!targetStepKey) {
-            if (currentStepIndex > 0) {
-                // Get the previous step that was just answered
-                targetStepKey = assessment.steps[currentStepIndex - 1].key;
+            // If no stepKey provided, use the current step
+            if (currentStepIndex < assessment.steps.length) {
+                targetStepKey = assessment.steps[currentStepIndex].key;
             }
             else {
-                // If we're at step 0, this might be a confirmation to start the assessment
-                // In this case, we should start with the first step
-                currentStepIndex = 0;
-                targetStepKey = assessment.steps[0].key;
+                throw new Error('Assessment already completed');
             }
         }
         if (!targetStepKey) {
