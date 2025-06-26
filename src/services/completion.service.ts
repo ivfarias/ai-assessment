@@ -47,16 +47,41 @@ export default class CompletionService {
 
     let userMessages: ChatCompletionMessageParam[] = [];
     if (query) {
-      const content = [
-        `User Query: "${query}"`,
-        `User Profile Context: ${JSON.stringify(context, null, 2)}`,
-        '',
-        'Conversation Summary:',
-        historySummary,
-        '',
-        'Relevant information from knowledge base:',
-        vectorContext,
-      ].join('\n');
+      // Determine if this is a simple greeting to reduce context
+      const isSimpleGreeting = this.isSimpleGreeting(query);
+      const isAssessmentQuery = this.isAssessmentRelatedQuery(query);
+      
+      let content: string;
+      
+      if (isSimpleGreeting) {
+        // For simple greetings, provide minimal context
+        content = `User Query: "${query}"`;
+      } else if (isAssessmentQuery) {
+        // For assessment queries, focus on assessment context
+        content = [
+          `User Query: "${query}"`,
+          `User Profile Context: ${JSON.stringify(context, null, 2)}`,
+          '',
+          'Conversation Summary:',
+          historySummary,
+          '',
+          'Relevant business context:',
+          vectorContext,
+        ].join('\n');
+      } else {
+        // For other queries, provide full context
+        content = [
+          `User Query: "${query}"`,
+          `User Profile Context: ${JSON.stringify(context, null, 2)}`,
+          '',
+          'Conversation Summary:',
+          historySummary,
+          '',
+          'Relevant information from knowledge base:',
+          vectorContext,
+        ].join('\n');
+      }
+      
       userMessages.push({ role: 'user', content });
     }
 
@@ -219,11 +244,33 @@ export default class CompletionService {
       // Get the current assessment from user profile
       const user = await getDb().collection("user_profiles").findOne({ _id: user_id });
       const currentAssessment = user?.progress?.currentAssessment;
+      const currentStepIndex = user?.progress?.stepIndex || 0;
       
       if (!currentAssessment) {
         return 'Não há uma análise ativa no momento.';
       }
 
+      // If stepIndex is 0, the user hasn't started answering questions yet
+      // This might be a greeting or confirmation, not an actual answer
+      if (currentStepIndex === 0) {
+        // Check if this looks like a confirmation to start the assessment
+        const isConfirmation = this.isConfirmation(input);
+        if (isConfirmation) {
+          // Start the assessment properly
+          const result = await this.assessmentRagService.assessmentService.startAssessment(currentAssessment, user_id);
+          if (result.currentStep) {
+            return result.currentStep.goal_prompt;
+          }
+        } else {
+          // If it's not a confirmation, just ask the first question
+          const result = await this.assessmentRagService.assessmentService.getStatus(currentAssessment, user_id);
+          if (result.currentStep) {
+            return result.currentStep.goal_prompt;
+          }
+        }
+      }
+
+      // Process the actual answer
       const result = await this.assessmentRagService.assessmentService.processAnswer(currentAssessment, user_id, input);
       
       if (result.status === 'completed') {
@@ -249,6 +296,15 @@ export default class CompletionService {
   }
 
   /**
+   * Determines if a message is a confirmation to start an assessment
+   */
+  private isConfirmation(message: string): boolean {
+    const confirmations = ['sim', 'yes', 'ok', 'claro', 'quero', 'vamos', 'começar', 'start', 'go', 'okay'];
+    const lowerMessage = message.toLowerCase().trim();
+    return confirmations.some(conf => lowerMessage.includes(conf));
+  }
+
+  /**
    * Formats vector results into a readable string
    * @param results - Array of vector results to format
    * @returns Formatted string of vector results
@@ -256,5 +312,35 @@ export default class CompletionService {
    */
   private formatVectorResults(results: IVectorResult[]): string {
     return results.map((result, index) => `${index + 1}. ${result.text}`).join('\n');
+  }
+
+  /**
+   * Determines if a query is a simple greeting
+   */
+  private isSimpleGreeting(query: string): boolean {
+    const greetingKeywords = [
+      'olá', 'oi', 'hello', 'hi', 'hey', 'bom dia', 'good morning', 'boa tarde',
+      'good afternoon', 'boa noite', 'good evening', 'tudo bem', 'how are you'
+    ];
+    
+    const lowerQuery = query.toLowerCase().trim();
+    return greetingKeywords.some(keyword => lowerQuery === keyword || lowerQuery.startsWith(keyword + ' '));
+  }
+
+  /**
+   * Determines if a query is assessment-related
+   */
+  private isAssessmentRelatedQuery(query: string): boolean {
+    const assessmentKeywords = [
+      'avaliação', 'assessment', 'análise', 'analysis', 'diagnóstico', 'diagnosis',
+      'simular', 'simulate', 'lucro', 'profit', 'saúde financeira', 'financial health',
+      'radar', 'independência operacional', 'operational independence', 'ferramentas',
+      'tools', 'padronização', 'standardization', 'fidelização', 'loyalty', 'clientes',
+      'customers', 'aquisição', 'acquisition', 'estratégia', 'strategy', 'mercado',
+      'market', 'organização', 'organization', 'contexto', 'context'
+    ];
+    
+    const lowerQuery = query.toLowerCase();
+    return assessmentKeywords.some(keyword => lowerQuery.includes(keyword));
   }
 }

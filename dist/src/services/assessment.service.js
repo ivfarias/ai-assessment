@@ -173,8 +173,17 @@ export class AssessmentService {
         let answers = user.progress.answers || {};
         // Determine which step to process
         let targetStepKey = stepKey;
-        if (!targetStepKey && currentStepIndex > 0) {
-            targetStepKey = assessment.steps[currentStepIndex - 1].key;
+        if (!targetStepKey) {
+            if (currentStepIndex > 0) {
+                // Get the previous step that was just answered
+                targetStepKey = assessment.steps[currentStepIndex - 1].key;
+            }
+            else {
+                // If we're at step 0, this might be a confirmation to start the assessment
+                // In this case, we should start with the first step
+                currentStepIndex = 0;
+                targetStepKey = assessment.steps[0].key;
+            }
         }
         if (!targetStepKey) {
             throw new Error('Invalid step: No step key provided and no current step');

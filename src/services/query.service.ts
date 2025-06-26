@@ -66,23 +66,56 @@ export default class QueryService {
     const docsCollection = getDb().collection('KyteDocs');
     const macroCsCollection = getDb().collection('MacroCS');
     const queryVector = await this.openAIService.createEmbedding(query);
-    const topK = 5;
-    const docsVectorResults = await this.vectorRepository.searchSimilar({
-      queryVector,
-      topK,
-      index: 'docs_search_index',
-      collection: docsCollection,
-    });
-    const macroCsVectorResults = await this.vectorRepository.searchSimilar({
-      queryVector,
-      topK,
-      index: 'macro_cs_search_index',
-      collection: macroCsCollection,
-    });
+    
+    // Determine query type to optimize context retrieval
+    const isAssessmentQuery = this.isAssessmentRelatedQuery(query);
+    const isSupportQuery = this.isSupportRelatedQuery(query);
+    const isSimpleGreeting = this.isSimpleGreeting(query);
+    
+    let topResults: any[] = [];
+    
+    // Only retrieve context if it's not a simple greeting
+    if (!isSimpleGreeting) {
+      const topK = isAssessmentQuery ? 3 : 5; // Less context for assessment queries
+      
+      if (isSupportQuery) {
+        // For support queries, prioritize support documentation
+        const docsVectorResults = await this.vectorRepository.searchSimilar({
+          queryVector,
+          topK,
+          index: 'docs_search_index',
+          collection: docsCollection,
+        });
+        topResults = docsVectorResults;
+      } else if (isAssessmentQuery) {
+        // For assessment queries, prioritize business context
+        const macroCsVectorResults = await this.vectorRepository.searchSimilar({
+          queryVector,
+          topK,
+          index: 'macro_cs_search_index',
+          collection: macroCsCollection,
+        });
+        topResults = macroCsVectorResults;
+      } else {
+        // For general queries, get both but limit results
+        const docsVectorResults = await this.vectorRepository.searchSimilar({
+          queryVector,
+          topK: 3,
+          index: 'docs_search_index',
+          collection: docsCollection,
+        });
+        const macroCsVectorResults = await this.vectorRepository.searchSimilar({
+          queryVector,
+          topK: 3,
+          index: 'macro_cs_search_index',
+          collection: macroCsCollection,
+        });
 
-    const topResults = [...docsVectorResults, ...macroCsVectorResults]
-      .sort((a, b) => b.score - a.score)
-      .filter((_, index) => index <= topK);
+        topResults = [...docsVectorResults, ...macroCsVectorResults]
+          .sort((a, b) => b.score - a.score)
+          .filter((_, index) => index <= topK);
+      }
+    }
 
     const memory = await this.conversationManager.getMemory(options.userId);
     const chatHistory = await memory.loadMemoryVariables({});
@@ -172,5 +205,49 @@ export default class QueryService {
    */
   private cacheResults(query: string, options: IQueryOptions, result: IQueryResponse): void {
     this.messageCache.setQueryResult(query, options, result);
+  }
+
+  /**
+   * Determines if a query is assessment-related
+   */
+  private isAssessmentRelatedQuery(query: string): boolean {
+    const assessmentKeywords = [
+      'avaliação', 'assessment', 'análise', 'analysis', 'diagnóstico', 'diagnosis',
+      'simular', 'simulate', 'lucro', 'profit', 'saúde financeira', 'financial health',
+      'radar', 'independência operacional', 'operational independence', 'ferramentas',
+      'tools', 'padronização', 'standardization', 'fidelização', 'loyalty', 'clientes',
+      'customers', 'aquisição', 'acquisition', 'estratégia', 'strategy', 'mercado',
+      'market', 'organização', 'organization', 'contexto', 'context'
+    ];
+    
+    const lowerQuery = query.toLowerCase();
+    return assessmentKeywords.some(keyword => lowerQuery.includes(keyword));
+  }
+
+  /**
+   * Determines if a query is support-related
+   */
+  private isSupportRelatedQuery(query: string): boolean {
+    const supportKeywords = [
+      'ajuda', 'help', 'suporte', 'support', 'como', 'how', 'cadastrar', 'register',
+      'produto', 'product', 'configurar', 'configure', 'problema', 'problem',
+      'erro', 'error', 'funcionalidade', 'feature', 'kyte', 'app', 'aplicativo'
+    ];
+    
+    const lowerQuery = query.toLowerCase();
+    return supportKeywords.some(keyword => lowerQuery.includes(keyword));
+  }
+
+  /**
+   * Determines if a query is a simple greeting
+   */
+  private isSimpleGreeting(query: string): boolean {
+    const greetingKeywords = [
+      'olá', 'oi', 'hello', 'hi', 'hey', 'bom dia', 'good morning', 'boa tarde',
+      'good afternoon', 'boa noite', 'good evening', 'tudo bem', 'how are you'
+    ];
+    
+    const lowerQuery = query.toLowerCase().trim();
+    return greetingKeywords.some(keyword => lowerQuery === keyword || lowerQuery.startsWith(keyword + ' '));
   }
 }
