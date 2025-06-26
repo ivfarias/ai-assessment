@@ -1,88 +1,60 @@
-import { getDb } from '../config/mongodb.js';
-import { AssessmentService } from '../services/assessment.service.js';
+import { MongoClient } from 'mongodb';
 import { AssessmentRagService } from '../services/assessmentRagService.js';
-import { AssessmentEmbeddingService } from '../services/assessmentEmbeddingService.js';
-async function testAssessmentSystem() {
+async function testAssessmentEndpoints() {
     try {
-        console.log('🧪 Testing assessment system...\n');
-        const db = getDb();
-        // Test 1: Initialize embedding service
-        console.log('1. Testing embedding service initialization...');
-        const embeddingService = new AssessmentEmbeddingService(db);
-        await embeddingService.initializeKnowledgeBase();
-        console.log('✅ Embedding service initialized successfully!\n');
-        // Test 2: Test assessment suggestions
-        console.log('2. Testing assessment suggestions...');
-        const suggestions = await embeddingService.getAssessmentSuggestions('Quero melhorar a saúde financeira do meu negócio');
-        console.log(`✅ Found ${suggestions.length} suggestions:`, suggestions.map(s => s.suggestedAssessment));
-        console.log('');
-        // Test 3: Test RAG service
-        console.log('3. Testing RAG service...');
+        console.log('🧪 Testing assessment endpoints...\n');
+        // Connect to MongoDB
+        const uri = process.env.MONGODB_CONNECTION_STRING;
+        const dbName = process.env.KYTE_DATA_DBNAME;
+        if (!uri) {
+            throw new Error('MONGODB_CONNECTION_STRING not set');
+        }
+        console.log('📡 Connecting to MongoDB...');
+        const client = new MongoClient(uri);
+        await client.connect();
+        const db = client.db(dbName);
+        console.log('✅ Connected to MongoDB');
+        // Test assessment service
         const ragService = new AssessmentRagService(db);
-        const testUserId = 'test-user-rag-' + Date.now();
-        const result1 = await ragService.processMessage(testUserId, 'Quero fazer uma avaliação financeira');
-        console.log(`✅ RAG result 1:`, result1);
-        const result2 = await ragService.processMessage(testUserId, 'sim');
-        console.log(`✅ RAG result 2:`, result2);
+        // Test 1: Get available assessments
+        console.log('1. Testing getAvailableAssessments...');
+        const assessments = ragService.getAvailableAssessments();
+        console.log(`   Found ${assessments.length} assessments`);
+        assessments.forEach(a => console.log(`   - ${a.name}: ${a.description}`));
         console.log('');
-        // Test 4: Test assessment service
-        console.log('4. Testing assessment service...');
-        const assessmentService = new AssessmentService(db);
-        const testUserId2 = 'test-user-assessment-' + Date.now();
-        // Start assessment
-        const startResult = await assessmentService.startAssessment('simulateProfit', testUserId2);
-        console.log(`✅ Started assessment: ${startResult.status}`);
-        console.log(`   Current step: ${startResult.currentStep?.key}`);
-        console.log(`   Progress: ${startResult.progress.current}/${startResult.progress.total}`);
+        // Test 2: Get user assessment status
+        console.log('2. Testing getUserAssessmentStatus...');
+        const testUserId = 'test-user-' + Date.now();
+        const status = await ragService.getUserAssessmentStatus(testUserId);
+        console.log(`   User status: ${JSON.stringify(status)}`);
         console.log('');
-        // Process first answer
-        const answer1Result = await assessmentService.processAnswer('simulateProfit', testUserId2, '5000', 'faturamentoMensal');
-        console.log(`✅ Processed answer 1: ${answer1Result.status}`);
-        console.log(`   Next step: ${answer1Result.nextStep?.key}`);
-        console.log(`   Progress: ${answer1Result.progress.current}/${answer1Result.progress.total}`);
+        // Test 3: Start an assessment
+        console.log('3. Testing startAssessment...');
+        const startResult = await ragService.startAssessment(testUserId, 'simulateProfit');
+        console.log(`   Start result: ${JSON.stringify(startResult)}`);
         console.log('');
-        // Process second answer
-        const answer2Result = await assessmentService.processAnswer('simulateProfit', testUserId2, '3000', 'custoProdutos');
-        console.log(`✅ Processed answer 2: ${answer2Result.status}`);
-        console.log(`   Next step: ${answer2Result.nextStep?.key}`);
-        console.log(`   Progress: ${answer2Result.progress.current}/${answer2Result.progress.total}`);
+        // Test 4: Process assessment answer
+        console.log('4. Testing processAssessmentAnswer...');
+        const answerResult = await ragService.processAssessmentAnswer(testUserId, '5000');
+        console.log(`   Answer result: ${JSON.stringify(answerResult)}`);
         console.log('');
-        // Process third answer
-        const answer3Result = await assessmentService.processAnswer('simulateProfit', testUserId2, '20', 'percentualReinvestido');
-        console.log(`✅ Processed answer 3: ${answer3Result.status}`);
-        if (answer3Result.status === 'completed') {
-            console.log(`   Assessment completed!`);
-            console.log(`   Insights: ${answer3Result.insights?.length || 0} insights generated`);
-        }
+        // Test 5: Process another answer
+        console.log('5. Testing second answer...');
+        const answerResult2 = await ragService.processAssessmentAnswer(testUserId, '3000');
+        console.log(`   Second answer result: ${JSON.stringify(answerResult2)}`);
         console.log('');
-        // Test 5: Test direct assessment detection
-        console.log('5. Testing direct assessment detection...');
-        const directTests = [
-            'Quero simular lucro',
-            'Saúde financeira',
-            'Ferramentas',
-            'Fidelização de clientes'
-        ];
-        for (const test of directTests) {
-            const result = await ragService.processMessage('test-direct-' + Date.now(), test);
-            console.log(`   "${test}" -> ${result.action} (${result.assessmentName})`);
-        }
+        // Test 6: Process final answer
+        console.log('6. Testing final answer...');
+        const answerResult3 = await ragService.processAssessmentAnswer(testUserId, '20');
+        console.log(`   Final answer result: ${JSON.stringify(answerResult3)}`);
         console.log('');
-        console.log('🎉 All tests completed successfully!');
+        await client.close();
+        console.log('✅ All tests completed successfully!');
     }
     catch (error) {
         console.error('❌ Test failed:', error);
-        throw error;
+        process.exit(1);
     }
 }
-// Run the test
-testAssessmentSystem()
-    .then(() => {
-    console.log('✅ Assessment system test completed successfully!');
-    process.exit(0);
-})
-    .catch((error) => {
-    console.error('❌ Assessment system test failed:', error);
-    process.exit(1);
-});
+testAssessmentEndpoints();
 //# sourceMappingURL=testAssessmentEndpoints.js.map

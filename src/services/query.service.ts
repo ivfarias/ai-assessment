@@ -67,52 +67,55 @@ export default class QueryService {
     options: IQueryOptions,
   ): Promise<IQueryResponse> {
     try {
-      // First, check if this is an assessment-related request using RAG
       console.log(`🔍 Processing query: "${query}" for user: ${options.userId}`);
       
-      const assessmentResult = await this.assessmentRagService.processMessage(options.userId, query);
-      console.log(`📊 Assessment result:`, assessmentResult);
-      
-      if (assessmentResult.isAssessmentRequest) {
-        console.log(`🎯 Assessment request detected: ${assessmentResult.action}`);
+      // Get user's current assessment status for context
+      const assessmentStatus = await this.assessmentRagService.getUserAssessmentStatus(options.userId);
+      console.log(`📊 User assessment status:`, assessmentStatus);
+
+      // If user is in the middle of an assessment, process their answer
+      if (assessmentStatus.currentAssessment && assessmentStatus.stepIndex > 0) {
+        console.log(`🔄 User is in assessment: ${assessmentStatus.currentAssessment}, processing answer`);
+        const result = await this.assessmentRagService.processAssessmentAnswer(options.userId, query);
         
-        let response = '';
-        switch (assessmentResult.action) {
-          case 'start_assessment':
-            response = assessmentResult.response || 'Vamos começar a avaliação.';
-            break;
-          case 'process_answer':
-            response = assessmentResult.response || 'Processando sua resposta...';
-            break;
-          case 'suggest_assessment':
-            response = assessmentResult.response || 'Sugerindo avaliação...';
-            break;
-          default:
-            response = assessmentResult.response || 'Processando...';
+        if (result.success) {
+          if (result.completed) {
+            const response = `✅ Análise concluída!\n\n💡 Principais insights:\n${result.insights?.map((insight, i) => `${i + 1}. ${insight}`).join('\n') || 'Análise concluída com sucesso.'}`;
+            
+            // Store the conversation
+            const memory = await this.conversationManager.getMemory(options.userId);
+            await memory.chatHistory.addMessages([
+              new HumanMessage(query),
+              new AIMessage(response),
+            ]);
+
+            return {
+              matches: [],
+              answer: response,
+            };
+          } else if (result.nextStep) {
+            // Store the conversation
+            const memory = await this.conversationManager.getMemory(options.userId);
+            await memory.chatHistory.addMessages([
+              new HumanMessage(query),
+              new AIMessage(result.nextStep),
+            ]);
+
+            return {
+              matches: [],
+              answer: result.nextStep,
+            };
+          }
         }
-
-        console.log(`💬 Assessment response: ${response}`);
-
-        // Store the conversation
-        const memory = await this.conversationManager.getMemory(options.userId);
-        await memory.chatHistory.addMessages([
-          new HumanMessage(query),
-          new AIMessage(response),
-        ]);
-
-        return {
-          matches: [],
-          answer: response,
-        };
       }
 
-      console.log(`💬 No assessment request, proceeding with normal query processing`);
+      console.log(`💬 Processing as general query`);
     } catch (error) {
       console.error('❌ Error in assessment processing:', error);
       // Continue with normal query processing if assessment processing fails
     }
 
-    // If not an assessment request, proceed with normal query processing
+    // Normal query processing
     const docsCollection = getDb().collection('KyteDocs');
     const macroCsCollection = getDb().collection('MacroCS');
     const queryVector = await this.openAIService.createEmbedding(query);
@@ -172,6 +175,10 @@ export default class QueryService {
 
     const historySummary = await this.summaryService.summarizeChatHistory(chatHistory);
 
+    // Get assessment information for context
+    const availableAssessments = this.assessmentRagService.getAvailableAssessments();
+    const assessmentContext = `Available business assessments: ${availableAssessments.map(a => `${a.name} (${a.category}): ${a.description}`).join('; ')}`;
+
     // Improved tool message filtering - keep assessment-related tool messages
     const cleanHistory = chatHistory.chat_history?.filter(
       m => {
@@ -191,7 +198,7 @@ export default class QueryService {
 
     const firstResponse = await this.completionService.generateContextualResponse({
       query,
-      context: options.context,
+      context: `${options.context || ''}\n\n${assessmentContext}`,
       vectorResults: topResults,
       historySummary,
       messages: cleanHistory,
@@ -202,27 +209,65 @@ export default class QueryService {
     if (firstResponse.tool_calls?.length) {
       const toolCall = firstResponse.tool_calls[0];
       
-      // Create a proper tool response message
-      const toolResponse = {
-        role: "tool" as const,
-        tool_call_id: toolCall.id,
-        name: toolCall.function.name,
-        content: "Tool execution completed successfully."
-      };
+      // Handle assessment tool calls
+      if (toolCall.function.name === 'start_assessment') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          const assessmentName = args.assessment_name;
+          
+          const result = await this.assessmentRagService.startAssessment(options.userId, assessmentName);
+          
+          if (result.success && result.currentStep) {
+            finalAnswer = result.currentStep;
+          } else {
+            finalAnswer = `Desculpe, não foi possível iniciar a análise "${assessmentName}". ${result.error || 'Tente novamente.'}`;
+          }
+        } catch (error) {
+          console.error('Error handling start_assessment tool call:', error);
+          finalAnswer = 'Desculpe, houve um erro ao iniciar a análise. Tente novamente.';
+        }
+      } else if (toolCall.function.name === 'process_assessment_answer') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          const answer = args.answer;
+          
+          const result = await this.assessmentRagService.processAssessmentAnswer(options.userId, answer);
+          
+          if (result.success) {
+            if (result.completed) {
+              finalAnswer = `✅ Análise concluída!\n\n💡 Principais insights:\n${result.insights?.map((insight, i) => `${i + 1}. ${insight}`).join('\n') || 'Análise concluída com sucesso.'}`;
+            } else if (result.nextStep) {
+              finalAnswer = result.nextStep;
+            }
+          } else {
+            finalAnswer = `Desculpe, houve um erro ao processar sua resposta. ${result.error || 'Tente novamente.'}`;
+          }
+        } catch (error) {
+          console.error('Error handling process_assessment_answer tool call:', error);
+          finalAnswer = 'Desculpe, houve um erro ao processar sua resposta. Tente novamente.';
+        }
+      } else {
+        // Create a proper tool response message for other tool calls
+        const toolResponse = {
+          role: "tool" as const,
+          tool_call_id: toolCall.id,
+          name: toolCall.function.name,
+          content: "Tool execution completed successfully."
+        };
 
-      // For the followup call, only include the current response and tool response
-      // Don't include any history that might have problematic tool messages
-      const followup = await this.completionService.generateContextualResponse({
-        query,
-        context: options.context,
-        vectorResults: topResults,
-        historySummary,
-        messages: [
-          firstResponse,
-          toolResponse
-        ]
-      });
-      finalAnswer = followup.content || finalAnswer;
+        // For the followup call, only include the current response and tool response
+        const followup = await this.completionService.generateContextualResponse({
+          query,
+          context: `${options.context || ''}\n\n${assessmentContext}`,
+          vectorResults: topResults,
+          historySummary,
+          messages: [
+            firstResponse,
+            toolResponse
+          ]
+        });
+        finalAnswer = followup.content || finalAnswer;
+      }
     }
 
     await memory.chatHistory.addMessages([

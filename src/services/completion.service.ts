@@ -40,9 +40,31 @@ export default class CompletionService {
   }): Promise<ChatCompletionMessage> {
     const vectorContext = this.formatVectorResults(vectorResults);
 
+    // Get assessment information for context
+    const availableAssessments = this.assessmentRagService.getAvailableAssessments();
+    const assessmentInfo = availableAssessments.map(a => 
+      `${a.name} (${a.category}): ${a.description}`
+    ).join('\n');
+
     const systemMessage: ChatCompletionMessageParam = {
       role: 'system',
-      content: process.env.SYSTEM_PROMPT,
+      content: `${process.env.SYSTEM_PROMPT || 'You are a helpful business consultant AI assistant.'}
+
+Available Business Assessments:
+${assessmentInfo}
+
+You can help users with business analysis by:
+1. Having natural conversations about their business
+2. Suggesting relevant assessments when appropriate
+3. Starting assessments when users want to do them
+4. Processing assessment answers and providing insights
+
+Use the assessment tools when users want to:
+- Start a specific assessment (use start_assessment)
+- Answer assessment questions (use process_assessment_answer)
+- Get assessment suggestions (use suggest_assessment)
+
+Always maintain natural conversation flow and only use assessments when the user explicitly wants them.`,
     };
 
     let userMessages: ChatCompletionMessageParam[] = [];
@@ -190,48 +212,38 @@ export default class CompletionService {
     const { user_id, user_query } = args;
     
     try {
-      // Use RAG to get intelligent assessment suggestions
-      const suggestions = await this.assessmentRagService.embeddingService.getAssessmentSuggestions(user_query);
+      // Get available assessments and suggest based on user query
+      const availableAssessments = this.assessmentRagService.getAvailableAssessments();
       
+      // Simple keyword matching for suggestions
+      const lowerQuery = user_query.toLowerCase();
+      const suggestions = availableAssessments.filter(assessment => {
+        const keywords = [
+          'lucro', 'profit', 'financeiro', 'financial', 'dinheiro', 'money',
+          'ferramentas', 'tools', 'tecnologia', 'technology',
+          'clientes', 'customers', 'fidelização', 'loyalty',
+          'operacional', 'operational', 'processos', 'processes',
+          'estratégia', 'strategy', 'mercado', 'market',
+          'organização', 'organization', 'equipe', 'team'
+        ];
+        
+        return keywords.some(keyword => 
+          lowerQuery.includes(keyword) || 
+          assessment.description.toLowerCase().includes(keyword)
+        );
+      });
+
       if (suggestions.length === 0) {
         return 'Desculpe, não consegui identificar uma análise adequada para sua situação. Pode me contar mais sobre o que você gostaria de melhorar no seu negócio?';
       }
 
       const bestSuggestion = suggestions[0];
-      const assessmentDefinitions = this.assessmentRagService.getAvailableAssessments();
-      const assessment = assessmentDefinitions.find(a => a.name === bestSuggestion.suggestedAssessment);
+      const assessmentList = suggestions.map(a => `• ${a.name}: ${a.description}`).join('\n');
       
-      if (!assessment) {
-        return 'Desculpe, não consegui identificar uma análise adequada para sua situação.';
-      }
-
-      let message = `💡 Baseado na sua pergunta sobre "${user_query}", sugiro a análise: **${assessment.name}**\n\n`;
-      message += `📋 **O que esta análise faz:**\n${assessment.description}\n\n`;
-      message += `🤔 **Por que seria útil:** ${bestSuggestion.reasoning}\n\n`;
-      message += `✅ **Gostaria de começar esta análise agora?**\n`;
-      message += `Responda "sim" para iniciar ou me diga se prefere outra abordagem.`;
-
-      return message;
+      return `Com base no que você mencionou, aqui estão algumas análises que podem ajudar:\n\n${assessmentList}\n\nQual dessas análises você gostaria de fazer?`;
     } catch (error) {
-      console.error('Error in assessment suggestion:', error);
-      
-      // Fallback to direct assessment detection
-      const directAssessment = this.detectDirectAssessmentRequest(user_query);
-      if (directAssessment) {
-        const assessmentDefinitions = this.assessmentRagService.getAvailableAssessments();
-        const assessment = assessmentDefinitions.find(a => a.name === directAssessment);
-        
-        if (assessment) {
-          let message = `💡 Baseado na sua pergunta, sugiro a análise: **${assessment.name}**\n\n`;
-          message += `📋 **O que esta análise faz:**\n${assessment.description}\n\n`;
-          message += `✅ **Gostaria de começar esta análise agora?**\n`;
-          message += `Responda "sim" para iniciar ou me diga se prefere outra abordagem.`;
-          
-          return message;
-        }
-      }
-      
-      return 'Desculpe, não consegui identificar uma análise adequada para sua situação. Pode me contar mais sobre o que você gostaria de melhorar no seu negócio?';
+      console.error('Error handling assessment suggestion:', error);
+      return 'Desculpe, houve um erro ao sugerir análises. Pode me contar mais sobre o que você gostaria de melhorar no seu negócio?';
     }
   }
 
@@ -300,19 +312,19 @@ export default class CompletionService {
   }
 
   /**
-   * Handle starting an assessment using the AssessmentService directly
+   * Handle starting an assessment
    */
   private async handleStartAssessment(args: any): Promise<string> {
     const { assessment_name, user_id } = args;
     
     try {
-      const result = await this.assessmentRagService.assessmentService.startAssessment(assessment_name, user_id);
+      const result = await this.assessmentRagService.startAssessment(user_id, assessment_name);
       
-      if (result.currentStep) {
-        return result.currentStep.goal_prompt;
+      if (result.success && result.currentStep) {
+        return result.currentStep;
+      } else {
+        return `Desculpe, não foi possível iniciar a análise "${assessment_name}". ${result.error || 'Tente novamente.'}`;
       }
-
-      return `Vamos começar a análise de ${assessment_name}. Por favor, forneça as informações necessárias.`;
     } catch (error) {
       console.error('Error starting assessment:', error);
       return 'Desculpe, houve um erro ao iniciar a análise. Tente novamente.';
@@ -320,60 +332,25 @@ export default class CompletionService {
   }
 
   /**
-   * Handle processing assessment answers using the AssessmentService directly
+   * Handle processing an assessment answer
    */
   private async handleProcessAssessmentAnswer(args: any): Promise<string> {
     const { user_id, input } = args;
     
     try {
-      // Get the current assessment from user profile
-      const user = await getDb().collection("user_profiles").findOne({ _id: user_id });
-      const currentAssessment = user?.progress?.currentAssessment;
-      const currentStepIndex = user?.progress?.stepIndex || 0;
+      const result = await this.assessmentRagService.processAssessmentAnswer(user_id, input);
       
-      if (!currentAssessment) {
-        return 'Não há uma análise ativa no momento.';
-      }
-
-      // If stepIndex is 0, the user hasn't started answering questions yet
-      // This might be a greeting or confirmation, not an actual answer
-      if (currentStepIndex === 0) {
-        // Check if this looks like a confirmation to start the assessment
-        const isConfirmation = this.isConfirmation(input);
-        if (isConfirmation) {
-          // Start the assessment properly
-          const result = await this.assessmentRagService.assessmentService.startAssessment(currentAssessment, user_id);
-          if (result.currentStep) {
-            return result.currentStep.goal_prompt;
-          }
+      if (result.success) {
+        if (result.completed) {
+          return `✅ Análise concluída!\n\n💡 Principais insights:\n${result.insights?.map((insight, i) => `${i + 1}. ${insight}`).join('\n') || 'Análise concluída com sucesso.'}`;
+        } else if (result.nextStep) {
+          return result.nextStep;
         } else {
-          // If it's not a confirmation, just ask the first question
-          const result = await this.assessmentRagService.assessmentService.getStatus(currentAssessment, user_id);
-          if (result.currentStep) {
-            return result.currentStep.goal_prompt;
-          }
+          return 'Por favor, continue respondendo as perguntas da análise.';
         }
+      } else {
+        return `Desculpe, houve um erro ao processar sua resposta. ${result.error || 'Tente novamente.'}`;
       }
-
-      // Process the actual answer
-      const result = await this.assessmentRagService.assessmentService.processAnswer(currentAssessment, user_id, input);
-      
-      if (result.status === 'completed') {
-        let message = `✅ Análise de ${currentAssessment} concluída!\n\n`;
-        if (result.insights && result.insights.length > 0) {
-          message += "💡 Principais insights:\n";
-          result.insights.forEach((insight: string, index: number) => {
-            message += `${index + 1}. ${insight}\n`;
-          });
-        }
-        return message;
-      }
-      
-      if (result.nextStep) {
-        return result.nextStep.goal_prompt;
-      }
-      
-      return 'Por favor, continue respondendo as perguntas da análise.';
     } catch (error) {
       console.error('Error processing assessment answer:', error);
       return 'Desculpe, houve um erro ao processar sua resposta. Tente novamente.';
